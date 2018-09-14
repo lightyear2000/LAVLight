@@ -163,9 +163,9 @@ HRESULT CLAVAudio::LoadDefaults()
     m_settings.bFormats[i] = TRUE;
 
   // Disable WMA codecs by default
-  //m_settings.bFormats[Codec_WMA2]   = FALSE;
-  //m_settings.bFormats[Codec_WMAPRO] = FALSE;
-  //m_settings.bFormats[Codec_WMALL]  = FALSE;
+  m_settings.bFormats[Codec_WMA2]   = FALSE;
+  m_settings.bFormats[Codec_WMAPRO] = FALSE;
+  m_settings.bFormats[Codec_WMALL]  = FALSE;
 
   // Default bitstreaming to disabled
   memset(m_settings.bBitstream, 0, sizeof(m_settings.bBitstream));
@@ -182,6 +182,9 @@ HRESULT CLAVAudio::LoadDefaults()
   for(int i = 0; i < SampleFormat_NB; ++i)
     m_settings.bSampleFormats[i] = TRUE;
   m_settings.SampleConvertDither = TRUE;
+
+  if (!IsVistaOrNewer())
+    m_settings.bSampleFormats[SampleFormat_FP32] = FALSE;
 
   m_settings.AudioDelayEnabled = FALSE;
   m_settings.AudioDelay = 0;
@@ -1418,7 +1421,7 @@ HRESULT CLAVAudio::ffmpeg_init(AVCodecID codec, const void *format, const GUID f
     return VFW_E_UNSUPPORTED_AUDIO;
   }
 
-  m_bFindDTSInPCM = FALSE; //(codec == AV_CODEC_ID_PCM_S16LE && m_settings.bFormats[Codec_DTS]);
+  m_bFindDTSInPCM = (codec == AV_CODEC_ID_PCM_S16LE && m_settings.bFormats[Codec_DTS]);
   m_FallbackFormat = SampleFormat_None;
   m_dwOverrideMixer = 0;
   m_bMixingSettingsChanged = TRUE;

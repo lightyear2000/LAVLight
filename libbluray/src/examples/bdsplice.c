@@ -17,13 +17,17 @@
  * <http://www.gnu.org/licenses/>.
  */
 
+#if HAVE_CONFIG_H
+#include "config.h"
+#endif
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include <libgen.h>
 #include <inttypes.h>
 
-#include "bluray.h"
+#include "libbluray/bluray.h"
 
 #define PKT_SIZE 192
 #define BUF_SIZE (PKT_SIZE * 1024)

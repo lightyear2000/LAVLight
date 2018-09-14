@@ -49,7 +49,6 @@ public class BDJLoader {
             this.fontPath = null;
             this.is = is;
         }
-
         public FontCacheAction(String fontPath) {
             this.fontPath = fontPath;
             this.is = null;
@@ -243,8 +242,11 @@ public class BDJLoader {
             // initialize appProxys
             for (int i = 0; i < appTable.length; i++) {
                 if (proxys[i] == null) {
-                    proxys[i] = BDJAppProxy.newInstance(new BDJXletContext(appTable[i], bdjo.getAppCaches(), gui));
-
+                    proxys[i] = BDJAppProxy.newInstance(
+                                                new BDJXletContext(
+                                                                   appTable[i],
+                                                                   bdjo.getAppCaches(),
+                                                                   gui));
                     /* log startup class, startup parameters and jar file */
                     String[] params = appTable[i].getParams();
                     String p = "";
@@ -316,9 +318,7 @@ public class BDJLoader {
             while (ids.hasMoreElements()) {
                 AppID id = (AppID)ids.nextElement();
                 BDJAppProxy proxy = (BDJAppProxy)db.getAppProxy(id);
-                if (proxy != null) {
-                    proxy.stop(true);
-                }
+                proxy.stop(true);
             }
 
             ids = db.getAppIDs(new CurrentServiceFilter());

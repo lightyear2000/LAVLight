@@ -30,7 +30,6 @@
 #include "libavutil/common.h"
 #include "avcodec.h"
 #include "bswapdsp.h"
-#include "utvideodsp.h"
 #include "lossless_videodsp.h"
 #include "lossless_videoencdsp.h"
 
@@ -64,10 +63,12 @@ enum {
 /* Mapping of libavcodec prediction modes to Ut Video's */
 extern const int ff_ut_pred_order[5];
 
+/* Order of RGB(A) planes in Ut Video */
+extern const int ff_ut_rgb_order[4];
+
 typedef struct UtvideoContext {
     const AVClass *class;
     AVCodecContext *avctx;
-    UTVideoDSPContext utdsp;
     BswapDSPContext bdsp;
     LLVidDSPContext llviddsp;
     LLVidEncDSPContext llvidencdsp;

@@ -72,11 +72,13 @@ static int rv10_write_header(AVFormatContext *ctx,
     RMMuxContext *rm = ctx->priv_data;
     AVIOContext *s = ctx->pb;
     StreamInfo *stream;
+    unsigned char *data_offset_ptr, *start_ptr;
     const char *desc, *mimetype;
     int nb_packets, packet_total_size, packet_max_size, size, packet_avg_size, i;
-    int bit_rate, v, duration, flags;
-    int data_offset;
+    int bit_rate, v, duration, flags, data_pos;
     AVDictionaryEntry *tag;
+
+    start_ptr = s->buf_ptr;
 
     ffio_wfourcc(s, ".RMF");
     avio_wb32(s,18); /* header size */
@@ -117,7 +119,7 @@ static int rv10_write_header(AVFormatContext *ctx,
     avio_wb32(s, BUFFER_DURATION);           /* preroll */
     avio_wb32(s, index_pos);           /* index offset */
     /* computation of data the data offset */
-    data_offset = avio_tell(s);
+    data_offset_ptr = s->buf_ptr;
     avio_wb32(s, 0);           /* data offset : will be patched after */
     avio_wb16(s, ctx->nb_streams);    /* num streams */
     flags = 1 | 2; /* save allowed & perfect play */
@@ -274,11 +276,12 @@ static int rv10_write_header(AVFormatContext *ctx,
     }
 
     /* patch data offset field */
-    rm->data_pos = avio_tell(s);
-    if (avio_seek(s, data_offset, SEEK_SET) >= 0) {
-        avio_wb32(s, rm->data_pos);
-        avio_seek(s, rm->data_pos, SEEK_SET);
-    }
+    data_pos = s->buf_ptr - start_ptr;
+    rm->data_pos = data_pos;
+    data_offset_ptr[0] = data_pos >> 24;
+    data_offset_ptr[1] = data_pos >> 16;
+    data_offset_ptr[2] = data_pos >> 8;
+    data_offset_ptr[3] = data_pos;
 
     /* data stream */
     ffio_wfourcc(s, "DATA");

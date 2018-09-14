@@ -5,8 +5,8 @@
 *.opensdf
 *.aps
 *.db
+*.zip
 *.opendb
-*.bak
 
 /ipch
 /bin_*

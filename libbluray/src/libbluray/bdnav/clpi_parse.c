@@ -25,7 +25,6 @@
 #include "clpi_parse.h"
 
 #include "extdata_parse.h"
-#include "bdmv_parse.h"
 
 #include "disc/disc.h"
 
@@ -38,6 +37,23 @@
 #include <string.h>
 
 #define CLPI_SIG1  ('H' << 24 | 'D' << 16 | 'M' << 8 | 'V')
+#define CLPI_SIG2A ('0' << 24 | '2' << 16 | '0' << 8 | '0')
+#define CLPI_SIG2B ('0' << 24 | '1' << 16 | '0' << 8 | '0')
+#define CLPI_SIG2C ('0' << 24 | '2' << 16 | '4' << 8 | '0')
+
+static void
+_human_readable_sig(char *sig, uint32_t s1, uint32_t s2)
+{
+    sig[0] = (s1 >> 24) & 0xFF;
+    sig[1] = (s1 >> 16) & 0xFF;
+    sig[2] = (s1 >>  8) & 0xFF;
+    sig[3] = (s1      ) & 0xFF;
+    sig[4] = (s2 >> 24) & 0xFF;
+    sig[5] = (s2 >> 16) & 0xFF;
+    sig[6] = (s2 >>  8) & 0xFF;
+    sig[7] = (s2      ) & 0xFF;
+    sig[8] = 0;
+}
 
 static int
 _parse_stream_attr(BITSTREAM *bits, CLPI_PROG_STREAM *ss)
@@ -60,7 +76,6 @@ _parse_stream_attr(BITSTREAM *bits, CLPI_PROG_STREAM *ss)
         case 0xea:
         case 0x1b:
         case 0x20:
-        case 0x24:
             ss->format = bs_read(bits, 4);
             ss->rate   = bs_read(bits, 4);
             ss->aspect = bs_read(bits, 4);
@@ -112,11 +127,26 @@ _parse_stream_attr(BITSTREAM *bits, CLPI_PROG_STREAM *ss)
 static int
 _parse_header(BITSTREAM *bits, CLPI_CL *cl)
 {
-    cl->type_indicator = CLPI_SIG1;
-    if (!bdmv_parse_header(bits, cl->type_indicator, &cl->type_indicator2)) {
+    if (bs_seek_byte(bits, 0) < 0) {
         return 0;
     }
 
+    cl->type_indicator  = bs_read(bits, 32);
+    cl->type_indicator2 = bs_read(bits, 32);
+    if (cl->type_indicator != CLPI_SIG1 || 
+        (cl->type_indicator2 != CLPI_SIG2A &&
+         cl->type_indicator2 != CLPI_SIG2B &&
+         cl->type_indicator2 != CLPI_SIG2C)) {
+
+        char sig[9];
+        char expect[9];
+
+        _human_readable_sig(sig, cl->type_indicator, cl->type_indicator2);
+        _human_readable_sig(expect, CLPI_SIG1, CLPI_SIG2A);
+        BD_DEBUG(DBG_NAV | DBG_CRIT, "failed signature match expected (%s) got (%s)\n",
+                expect, sig);
+        return 0;
+    }
     cl->sequence_info_start_addr = bs_read(bits, 32);
     cl->program_info_start_addr = bs_read(bits, 32);
     cl->cpi_start_addr = bs_read(bits, 32);
@@ -307,11 +337,6 @@ _parse_ep_map_stream(BITSTREAM *bits, CLPI_EP_MAP_ENTRY *ee)
     }
     fine_start = bs_read(bits, 32);
 
-    if (bs_avail(bits)/(8*8) < ee->num_ep_coarse) {
-        BD_DEBUG(DBG_HDMV|DBG_CRIT, "clpi_parse: unexpected EOF (EP coarse)\n");
-        return 0;
-    }
-
     coarse = malloc(ee->num_ep_coarse * sizeof(CLPI_EP_COARSE));
     ee->coarse = coarse;
     if (ee->num_ep_coarse && !coarse) {
@@ -325,11 +350,6 @@ _parse_ep_map_stream(BITSTREAM *bits, CLPI_EP_MAP_ENTRY *ee)
     }
 
     if (bs_seek_byte(bits, ee->ep_map_stream_start_addr+fine_start) < 0) {
-        return 0;
-    }
-
-    if (bs_avail(bits)/(8*4) < ee->num_ep_fine) {
-        BD_DEBUG(DBG_HDMV|DBG_CRIT, "clpi_parse: unexpected EOF (EP fine)\n");
         return 0;
     }
 
@@ -689,10 +709,14 @@ _clean_cpi(CLPI_CPI *cpi)
     }
 }
 
-static void
-_clpi_free(CLPI_CL *cl)
+void
+clpi_free(CLPI_CL *cl)
 {
     int ii;
+
+    if (cl == NULL) {
+        return;
+    }
 
     X_FREE(cl->clip.atc_delta);
     X_FREE(cl->clip.font_info.font);
@@ -716,15 +740,6 @@ _clpi_free(CLPI_CL *cl)
     X_FREE(cl);
 }
 
-void
-clpi_free(CLPI_CL **cl)
-{
-    if (*cl) {
-        _clpi_free(*cl);
-        *cl = NULL;
-    }
-}
-
 static CLPI_CL*
 _clpi_parse(BD_FILE_H *fp)
 {
@@ -743,7 +758,7 @@ _clpi_parse(BD_FILE_H *fp)
     }
 
     if (!_parse_header(&bits, cl)) {
-        _clpi_free(cl);
+        clpi_free(cl);
         return NULL;
     }
 
@@ -755,19 +770,19 @@ _clpi_parse(BD_FILE_H *fp)
     }
 
     if (!_parse_clipinfo(&bits, cl)) {
-        _clpi_free(cl);
+        clpi_free(cl);
         return NULL;
     }
     if (!_parse_sequence(&bits, cl)) {
-        _clpi_free(cl);
+        clpi_free(cl);
         return NULL;
     }
     if (!_parse_program_info(&bits, cl)) {
-        _clpi_free(cl);
+        clpi_free(cl);
         return NULL;
     }
     if (!_parse_cpi_info(&bits, cl)) {
-        _clpi_free(cl);
+        clpi_free(cl);
         return NULL;
     }
 
@@ -944,6 +959,6 @@ clpi_copy(const CLPI_CL* src_cl)
 
  fail:
     BD_DEBUG(DBG_CRIT, "out of memory\n");
-    clpi_free(&dest_cl);
+    clpi_free(dest_cl);
     return NULL;
 }

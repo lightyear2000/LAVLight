@@ -29,6 +29,7 @@
 #include "libavutil/x86/cpu.h"
 #include "libavcodec/cavsdsp.h"
 #include "libavcodec/idctdsp.h"
+#include "libavcodec/x86/idctdsp.h"
 #include "constants.h"
 #include "fpel.h"
 #include "idctdsp.h"

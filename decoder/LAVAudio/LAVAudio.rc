@@ -90,9 +90,9 @@ BEGIN
     CONTROL         "Expand Mono to Stereo",IDC_EXPAND_MONO,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,15,178,91,10
     CONTROL         "Expand 6.1 to 7.1",IDC_EXPAND61,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,118,178,74,10
     CONTROL         "Use Legacy 5.1 channel layout",IDC_OUTPUT51_LEGACY,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,15,192,162,10
-	LTEXT           "LAV Light Audio Decoder x.xx", IDC_LAVAUDIO_FOOTER, 209, 201, 114, 8, 0, WS_EX_RIGHT
-	LTEXT           "Light version of Hendrik Leppkes LAV Filters", IDC_LAVAUDIO_FOOTER2, 209, 211, 151, 8, 0, WS_EX_RIGHT
-	GROUPBOX        "Output Formats",IDC_OUTPUT_FORMATS,207,59,151,132
+  	LTEXT           "LAV Light Audio Decoder x.xx", IDC_LAVAUDIO_FOOTER, 209, 201, 114, 8, 0, WS_EX_RIGHT
+  	LTEXT           "Light version of Hendrik Leppkes LAV Filters", IDC_LAVAUDIO_FOOTER2, 209, 211, 151, 8, 0, WS_EX_RIGHT
+  	GROUPBOX        "Output Formats",IDC_OUTPUT_FORMATS,207,59,151,132
     LTEXT           "Select which output formats are available.\nThe best format is used automatically.",IDC_LBL_OUTPUTFORMATS,213,70,140,22
     CONTROL         "16-bit Integer",IDC_OUT_S16,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,216,91,61,10
     CONTROL         "24-bit Integer",IDC_OUT_S24,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,286,91,61,10

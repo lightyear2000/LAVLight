@@ -93,8 +93,8 @@ public class Libbluray {
     private static String canonicalize(String path, boolean create) {
         try {
             File dir = new File(path);
-            if (create && !dir.isDirectory() && !dir.mkdirs()) {
-                System.err.println("error creating directory " + path);
+            if (create) {
+                dir.mkdirs();
             }
             return dir.getCanonicalPath();
         } catch (Exception ioe) {
@@ -128,7 +128,7 @@ public class Libbluray {
             persistentRoot = canonicalize(persistentRoot, true);
         }
         if (budaRoot != null) {
-            budaRoot = canonicalize(budaRoot, true);
+            budaRoot       = canonicalize(budaRoot, true);
         }
 
         System.setProperty("dvb.persistent.root", persistentRoot);
@@ -157,8 +157,7 @@ public class Libbluray {
 
         try {
             BDFontMetrics.init();
-        } catch (Throwable t) {
-        }
+        } catch (Throwable t) {}
 
         System.setProperty("mhp.profile.enhanced_broadcast", "YES");
         System.setProperty("mhp.profile.interactive_broadcast", "YES");
@@ -318,31 +317,31 @@ public class Libbluray {
     /* used by javax/tv/service/SIManagerImpl */
     public static int numTitles() {
         synchronized (titleInfosLock) {
+        if (titleInfos == null) {
+            titleInfos = getTitleInfosN(nativePointer);
             if (titleInfos == null) {
-                titleInfos = getTitleInfosN(nativePointer);
-                if (titleInfos == null) {
-                    return -1;
-                }
+                return -1;
             }
-            return titleInfos.length - 2;
+        }
+        return titleInfos.length - 2;
         }
     }
 
     /* used by org/bluray/ti/TitleImpl */
     public static TitleInfo getTitleInfo(int titleNum) {
         synchronized (titleInfosLock) {
-            int numTitles = numTitles();
-            if (numTitles < 0)
-                return null;
+        int numTitles = numTitles();
+        if (numTitles < 0)
+            return null;
 
-            if (titleNum == 0xffff) {
-                return titleInfos[titleInfos.length - 1];
-            }
+        if (titleNum == 0xffff) {
+            return titleInfos[titleInfos.length - 1];
+        }
 
-            if (titleNum < 0 || titleNum > numTitles)
-                throw new IllegalArgumentException();
+        if (titleNum < 0 || titleNum > numTitles)
+            throw new IllegalArgumentException();
 
-            return titleInfos[titleNum];
+        return titleInfos[titleNum];
         }
     }
 
@@ -526,10 +525,6 @@ public class Libbluray {
         try {
             BDLocator locator = new BDLocator(null, titleNumber, -1);
             TitleImpl title   = (TitleImpl)SIManager.createInstance().getService(locator);
-            if (title == null) {
-                System.err.println("startTitle() failed: title " + titleNumber + " not found");
-                return false;
-            }
 
             titleContext = (TitleContext)ServiceContextFactory.getInstance().getServiceContext(null);
             titleContext.start(title, true);

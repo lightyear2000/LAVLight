@@ -31,13 +31,16 @@ ALLAVPROGS_G = $(AVBASENAMES:%=%$(PROGSSUF)_g$(EXESUF))
 $(foreach prog,$(AVBASENAMES),$(eval OBJS-$(prog) += cmdutils.o))
 $(foreach prog,$(AVBASENAMES),$(eval OBJS-$(prog)-$(CONFIG_OPENCL) += cmdutils_opencl.o))
 
-OBJS-ffmpeg                   += ffmpeg_opt.o ffmpeg_filter.o ffmpeg_hw.o
+OBJS-ffmpeg                   += ffmpeg_opt.o ffmpeg_filter.o
 OBJS-ffmpeg-$(CONFIG_VIDEOTOOLBOX) += ffmpeg_videotoolbox.o
 OBJS-ffmpeg-$(CONFIG_LIBMFX)  += ffmpeg_qsv.o
+OBJS-ffmpeg-$(CONFIG_VAAPI)   += ffmpeg_vaapi.o
 ifndef CONFIG_VIDEOTOOLBOX
 OBJS-ffmpeg-$(CONFIG_VDA)     += ffmpeg_videotoolbox.o
 endif
 OBJS-ffmpeg-$(CONFIG_CUVID)   += ffmpeg_cuvid.o
+OBJS-ffmpeg-$(HAVE_DXVA2_LIB) += ffmpeg_dxva2.o
+OBJS-ffmpeg-$(HAVE_VDPAU_X11) += ffmpeg_vdpau.o
 OBJS-ffserver                 += ffserver_config.o
 
 TESTTOOLS   = audiogen videogen rotozoom tiny_psnr tiny_ssim base64 audiomatch
@@ -56,6 +59,7 @@ FFLIBS-$(CONFIG_SWSCALE)    += swscale
 FFLIBS := avutil
 
 DATA_FILES := $(wildcard $(SRC_PATH)/presets/*.ffpreset) $(SRC_PATH)/doc/ffprobe.xsd
+EXAMPLES_FILES := $(wildcard $(SRC_PATH)/doc/examples/*.c) $(SRC_PATH)/doc/examples/Makefile $(SRC_PATH)/doc/examples/README
 
 SKIPHEADERS = compat/w32pthreads.h
 
@@ -78,7 +82,6 @@ target_dec_%_fuzzer$(EXESUF): target_dec_%_fuzzer.o $(FF_DEP_LIBS)
 	$(LD) $(LDFLAGS) $(LDEXEFLAGS) $(LD_O) $^ $(ELIBS) $(FF_EXTRALIBS) $(LIBFUZZER_PATH)
 
 tools/cws2fws$(EXESUF): ELIBS = $(ZLIB)
-tools/sofa2wavs$(EXESUF): ELIBS = $(FF_EXTRALIBS)
 tools/uncoded_frame$(EXESUF): $(FF_DEP_LIBS)
 tools/uncoded_frame$(EXESUF): ELIBS = $(FF_EXTRALIBS)
 tools/target_dec_%_fuzzer$(EXESUF): $(FF_DEP_LIBS)
@@ -94,10 +97,10 @@ ffbuild/.config: $(CONFIGURABLE_COMPONENTS)
 	@-printf '\nWARNING: $(?) newer than config.h, rerun configure\n\n'
 	@-tput sgr0 2>/dev/null
 
-SUBDIR_VARS := CLEANFILES FFLIBS HOSTPROGS TESTPROGS TOOLS               \
+SUBDIR_VARS := CLEANFILES EXAMPLES FFLIBS HOSTPROGS TESTPROGS TOOLS      \
                HEADERS ARCH_HEADERS BUILT_HEADERS SKIPHEADERS            \
                ARMV5TE-OBJS ARMV6-OBJS ARMV8-OBJS VFP-OBJS NEON-OBJS     \
-               ALTIVEC-OBJS VSX-OBJS MMX-OBJS X86ASM-OBJS                \
+               ALTIVEC-OBJS VSX-OBJS MMX-OBJS YASM-OBJS                  \
                MIPSFPU-OBJS MIPSDSPR2-OBJS MIPSDSP-OBJS MSA-OBJS         \
                MMI-OBJS OBJS SLIBOBJS HOSTOBJS TESTOBJS
 
@@ -118,7 +121,6 @@ endef
 $(foreach D,$(FFLIBS),$(eval $(call DOSUBDIR,lib$(D))))
 
 include $(SRC_PATH)/doc/Makefile
-include $(SRC_PATH)/doc/examples/Makefile
 
 define DOPROG
 OBJS-$(1) += $(1).o $(OBJS-$(1)-yes)
@@ -129,7 +131,7 @@ $(1)$(PROGSSUF)_g$(EXESUF): FF_EXTRALIBS += $(EXTRALIBS-$(1))
 -include $$(OBJS-$(1):.o=.d)
 endef
 
-$(foreach P,$(AVPROGS-yes),$(eval $(call DOPROG,$(P))))
+$(foreach P,$(PROGS),$(eval $(call DOPROG,$(P:$(PROGSSUF)$(EXESUF)=))))
 
 ffprobe.o cmdutils.o libavcodec/utils.o libavformat/utils.o libavdevice/avdevice.o libavfilter/avfilter.o libavutil/utils.o libpostproc/postprocess.o libswresample/swresample.o libswscale/utils.o : libavutil/ffversion.h
 
@@ -168,11 +170,10 @@ install-progs: install-progs-yes $(AVPROGS)
 	$(Q)mkdir -p "$(BINDIR)"
 	$(INSTALL) -c -m 755 $(INSTPROGS) "$(BINDIR)"
 
-install-data: $(DATA_FILES) $(EXAMPLES_FILES) $(EXAMPLE_MAKEFILE)
+install-data: $(DATA_FILES) $(EXAMPLES_FILES)
 	$(Q)mkdir -p "$(DATADIR)/examples"
 	$(INSTALL) -m 644 $(DATA_FILES) "$(DATADIR)"
 	$(INSTALL) -m 644 $(EXAMPLES_FILES) "$(DATADIR)/examples"
-	$(INSTALL) -m 644 $(EXAMPLE_MAKEFILE:%=%.example) "$(DATADIR)/examples/Makefile"
 
 uninstall: uninstall-libs uninstall-headers uninstall-progs uninstall-data
 
@@ -220,4 +221,5 @@ $(sort $(OBJDIRS)):
 # so this saves some time on slow systems.
 .SUFFIXES:
 
-.PHONY: all all-yes alltools check *clean config install* testprogs uninstall*
+.PHONY: all all-yes alltools check *clean config install*
+.PHONY: testprogs uninstall*

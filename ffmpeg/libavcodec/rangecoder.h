@@ -42,8 +42,6 @@ typedef struct RangeCoder {
     uint8_t *bytestream_start;
     uint8_t *bytestream;
     uint8_t *bytestream_end;
-    int overread;
-#define MAX_OVERREAD 2
 } RangeCoder;
 
 void ff_init_range_encoder(RangeCoder *c, uint8_t *buf, int buf_size);
@@ -108,11 +106,9 @@ static inline void refill(RangeCoder *c)
     if (c->range < 0x100) {
         c->range <<= 8;
         c->low   <<= 8;
-        if (c->bytestream < c->bytestream_end) {
+        if (c->bytestream < c->bytestream_end)
             c->low += c->bytestream[0];
-            c->bytestream++;
-        } else
-            c->overread ++;
+        c->bytestream++;
     }
 }
 

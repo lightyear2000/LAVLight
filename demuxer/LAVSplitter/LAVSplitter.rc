@@ -96,9 +96,9 @@ BEGIN
     EDITTEXT        IDC_QUEUE_PACKETS,323,151,54,13,ES_AUTOHSCROLL,WS_EX_RIGHT
     CONTROL         "",IDC_QUEUE_PACKETS_SPIN,"msctls_updown32",UDS_SETBUDDYINT | UDS_ALIGNRIGHT | UDS_AUTOBUDDY | UDS_ARROWKEYS | UDS_NOTHOUSANDS | UDS_HOTTRACK,375,151,11,13
     CONTROL         "Enable System Tray Icon",IDC_TRAYICON,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,7,257,192,10
-	LTEXT           "LAV Light Splitter x.xx", IDC_SPLITTER_FOOTER, 240, 254, 118, 8, 0, WS_EX_RIGHT
-	LTEXT           "Light version of Hendrik Leppkes LAV Filters", IDC_SPLITTER_FOOTER2, 240, 264, 151, 8, 0, WS_EX_RIGHT
-	GROUPBOX        "Format Settings",IDC_FMT_SETTINGS,214,173,179,42
+  	LTEXT           "LAV Light Splitter x.xx", IDC_SPLITTER_FOOTER, 240, 254, 118, 8, 0, WS_EX_RIGHT
+  	LTEXT           "Light version of Hendrik Leppkes LAV Filters", IDC_SPLITTER_FOOTER2, 240, 264, 151, 8, 0, WS_EX_RIGHT
+  	GROUPBOX        "Format Settings",IDC_FMT_SETTINGS,214,173,179,42
     CONTROL         "Enable VC-1 Timestamp Correction",IDC_VC1TIMESTAMP,
                     "Button",BS_AUTO3STATE | WS_TABSTOP,221,185,126,10
     CONTROL         "Load Matroska Segments from external files",IDC_MKV_EXTERNAL,

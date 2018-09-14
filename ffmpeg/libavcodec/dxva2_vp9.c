@@ -174,7 +174,7 @@ static int commit_bitstream_and_slice_buffer(AVCodecContext *avctx,
                                              DECODER_BUFFER_DESC *sc)
 {
     const VP9SharedContext *h = avctx->priv_data;
-    AVDXVAContext *ctx = DXVA_CONTEXT(avctx);
+    AVDXVAContext *ctx = avctx->hwaccel_context;
     struct vp9_dxva2_picture_context *ctx_pic = h->frames[CUR_FRAME].hwaccel_picture_private;
     void     *dxva_data_ptr;
     uint8_t  *dxva_data;
@@ -183,7 +183,7 @@ static int commit_bitstream_and_slice_buffer(AVCodecContext *avctx,
     unsigned type;
 
 #if CONFIG_D3D11VA
-    if (ff_dxva2_is_d3d11(avctx)) {
+    if (avctx->pix_fmt == AV_PIX_FMT_D3D11VA_VLD) {
         type = D3D11_VIDEO_DECODER_BUFFER_BITSTREAM;
         if (FAILED(ID3D11VideoContext_GetDecoderBuffer(D3D11VA_CONTEXT(ctx)->video_context,
                                                        D3D11VA_CONTEXT(ctx)->decoder,
@@ -218,7 +218,7 @@ static int commit_bitstream_and_slice_buffer(AVCodecContext *avctx,
     }
 
 #if CONFIG_D3D11VA
-    if (ff_dxva2_is_d3d11(avctx))
+    if (avctx->pix_fmt == AV_PIX_FMT_D3D11VA_VLD)
         if (FAILED(ID3D11VideoContext_ReleaseDecoderBuffer(D3D11VA_CONTEXT(ctx)->video_context, D3D11VA_CONTEXT(ctx)->decoder, type)))
             return -1;
 #endif
@@ -229,7 +229,7 @@ static int commit_bitstream_and_slice_buffer(AVCodecContext *avctx,
 #endif
 
 #if CONFIG_D3D11VA
-    if (ff_dxva2_is_d3d11(avctx)) {
+    if (avctx->pix_fmt == AV_PIX_FMT_D3D11VA_VLD) {
         D3D11_VIDEO_DECODER_BUFFER_DESC *dsc11 = bs;
         memset(dsc11, 0, sizeof(*dsc11));
         dsc11->BufferType           = type;
@@ -262,7 +262,7 @@ static int dxva2_vp9_start_frame(AVCodecContext *avctx,
                                  av_unused uint32_t size)
 {
     const VP9SharedContext *h = avctx->priv_data;
-    AVDXVAContext *ctx = DXVA_CONTEXT(avctx);
+    AVDXVAContext *ctx = avctx->hwaccel_context;
     struct vp9_dxva2_picture_context *ctx_pic = h->frames[CUR_FRAME].hwaccel_picture_private;
 
     if (!DXVA_CONTEXT_VALID(avctx, ctx))
@@ -318,13 +318,10 @@ AVHWAccel ff_vp9_dxva2_hwaccel = {
     .type           = AVMEDIA_TYPE_VIDEO,
     .id             = AV_CODEC_ID_VP9,
     .pix_fmt        = AV_PIX_FMT_DXVA2_VLD,
-    .init           = ff_dxva2_decode_init,
-    .uninit         = ff_dxva2_decode_uninit,
     .start_frame    = dxva2_vp9_start_frame,
     .decode_slice   = dxva2_vp9_decode_slice,
     .end_frame      = dxva2_vp9_end_frame,
     .frame_priv_data_size = sizeof(struct vp9_dxva2_picture_context),
-    .priv_data_size = sizeof(FFDXVASharedContext),
 };
 #endif
 
@@ -334,28 +331,9 @@ AVHWAccel ff_vp9_d3d11va_hwaccel = {
     .type           = AVMEDIA_TYPE_VIDEO,
     .id             = AV_CODEC_ID_VP9,
     .pix_fmt        = AV_PIX_FMT_D3D11VA_VLD,
-    .init           = ff_dxva2_decode_init,
-    .uninit         = ff_dxva2_decode_uninit,
     .start_frame    = dxva2_vp9_start_frame,
     .decode_slice   = dxva2_vp9_decode_slice,
     .end_frame      = dxva2_vp9_end_frame,
     .frame_priv_data_size = sizeof(struct vp9_dxva2_picture_context),
-    .priv_data_size = sizeof(FFDXVASharedContext),
-};
-#endif
-
-#if CONFIG_VP9_D3D11VA2_HWACCEL
-AVHWAccel ff_vp9_d3d11va2_hwaccel = {
-    .name           = "vp9_d3d11va2",
-    .type           = AVMEDIA_TYPE_VIDEO,
-    .id             = AV_CODEC_ID_VP9,
-    .pix_fmt        = AV_PIX_FMT_D3D11,
-    .init           = ff_dxva2_decode_init,
-    .uninit         = ff_dxva2_decode_uninit,
-    .start_frame    = dxva2_vp9_start_frame,
-    .decode_slice   = dxva2_vp9_decode_slice,
-    .end_frame      = dxva2_vp9_end_frame,
-    .frame_priv_data_size = sizeof(struct vp9_dxva2_picture_context),
-    .priv_data_size = sizeof(FFDXVASharedContext),
 };
 #endif

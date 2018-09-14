@@ -29,26 +29,22 @@
 #define BIT_0      0x7f
 #define BIT_1      0x81
 
-#if CONFIG_BIT_DEMUXER
 static int probe(AVProbeData *p)
 {
-    int i = 0, j, valid = 0;
+    int i, j;
 
-    while (2 * i + 3 < p->buf_size){
-        if (AV_RL16(&p->buf[2 * i++]) != SYNC_WORD)
+    if(p->buf_size < 0x40)
+        return 0;
+
+    for(i=0; i+3<p->buf_size && i< 10*0x50; ){
+        if(AV_RL16(&p->buf[0]) != SYNC_WORD)
             return 0;
-        j = AV_RL16(&p->buf[2 * i++]);
-        if (j != 0 && j != 0x10 && j != 0x40 && j != 0x50 && j != 0x76)
+        j=AV_RL16(&p->buf[2]);
+        if(j!=0x40 && j!=0x50)
             return 0;
-        if (j)
-            valid++;
-        i += j;
+        i+=j;
     }
-    if (valid > 10)
-        return AVPROBE_SCORE_MAX;
-    if (valid > 2)
-        return AVPROBE_SCORE_EXTENSION - 1;
-    return 0;
+    return AVPROBE_SCORE_EXTENSION;
 }
 
 static int read_header(AVFormatContext *s)
@@ -117,9 +113,8 @@ AVInputFormat ff_bit_demuxer = {
     .read_packet = read_packet,
     .extensions  = "bit",
 };
-#endif
 
-#if CONFIG_BIT_MUXER
+#if CONFIG_MUXERS
 static int write_header(AVFormatContext *s)
 {
     AVCodecParameters *par = s->streams[0]->codecpar;
@@ -146,10 +141,10 @@ static int write_packet(AVFormatContext *s, AVPacket *pkt)
         return AVERROR(EINVAL);
 
     avio_wl16(pb, SYNC_WORD);
-    avio_wl16(pb, 8 * pkt->size);
+    avio_wl16(pb, 8 * 10);
 
-    init_get_bits(&gb, pkt->data, 8 * pkt->size);
-    for (i = 0; i < 8 * pkt->size; i++)
+    init_get_bits(&gb, pkt->data, 8*10);
+    for(i=0; i< 8 * 10; i++)
         avio_wl16(pb, get_bits1(&gb) ? BIT_1 : BIT_0);
 
     return 0;

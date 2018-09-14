@@ -19,6 +19,8 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
+//#define DEBUG
+
 #include <math.h>
 
 #include "avformat.h"
@@ -450,7 +452,7 @@ static int avi_write_header(AVFormatContext *s)
                     && par->bits_per_coded_sample == 15)
                     par->bits_per_coded_sample = 16;
                 avist->pal_offset = avio_tell(pb) + 40;
-                ff_put_bmp_header(pb, par, 0, 0);
+                ff_put_bmp_header(pb, par, ff_codec_bmp_tags, 0, 0);
                 pix_fmt = avpriv_find_pix_fmt(avpriv_pix_fmt_bps_avi,
                                               par->bits_per_coded_sample);
                 if (   !par->codec_tag

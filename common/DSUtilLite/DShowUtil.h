@@ -81,7 +81,7 @@ static CUnknown* WINAPI CreateInstance(LPUNKNOWN lpunk, HRESULT* phr)
 
 extern void SetThreadName( DWORD dwThreadID, LPCSTR szThreadName);
 
-void split(const std::string& text, const std::string& separators, std::list<std::string>& words);
+void split(std::string& text, std::string& separators, std::list<std::string>& words);
 
 // Filter Registration
 extern void RegisterSourceFilter(const CLSID& clsid, const GUID& subtype2, LPCWSTR chkbytes, ...);
@@ -105,6 +105,7 @@ extern std::string ISO6392To6391(LPCSTR code);
 extern std::string ProbeForISO6392(LPCSTR lang);
 
 // FilterGraphUtils
+extern HRESULT FilterGraphCleanup(IFilterGraph *pGraph);
 extern IBaseFilter *FindFilter(const GUID& clsid, IFilterGraph *pFG);
 extern BOOL FilterInGraph(const GUID& clsid, IFilterGraph *pFG);
 extern BOOL FilterInGraphWithInputSubtype(const GUID& clsid, IFilterGraph *pFG, const GUID& clsidSubtype);
@@ -137,6 +138,7 @@ struct AVPacket;
 struct MediaSideDataFFMpeg;
 void CopyMediaSideDataFF(AVPacket *dst, const MediaSideDataFFMpeg **sd);
 
+BOOL IsVistaOrNewer();
 BOOL IsWindows7OrNewer();
 BOOL IsWindows8OrNewer();
 BOOL IsWindows10OrNewer();

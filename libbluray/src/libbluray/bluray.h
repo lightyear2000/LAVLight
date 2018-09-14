@@ -141,7 +141,6 @@ typedef enum {
     BLURAY_STREAM_TYPE_AUDIO_DTSHD_MASTER       = 0x86,
     BLURAY_STREAM_TYPE_VIDEO_VC1                = 0xea,
     BLURAY_STREAM_TYPE_VIDEO_H264               = 0x1b,
-    BLURAY_STREAM_TYPE_VIDEO_HEVC               = 0x24,
     BLURAY_STREAM_TYPE_SUB_PG                   = 0x90,
     BLURAY_STREAM_TYPE_SUB_IG                   = 0x91,
     BLURAY_STREAM_TYPE_SUB_TEXT                 = 0x92,
@@ -156,8 +155,7 @@ typedef enum {
     BLURAY_VIDEO_FORMAT_1080I             = 4,  // SMPTE 274M
     BLURAY_VIDEO_FORMAT_720P              = 5,  // SMPTE 296M
     BLURAY_VIDEO_FORMAT_1080P             = 6,  // SMPTE 274M
-    BLURAY_VIDEO_FORMAT_576P              = 7,  // ITU-R BT.1358
-    BLURAY_VIDEO_FORMAT_2160P             = 8,  //
+    BLURAY_VIDEO_FORMAT_576P              = 7   // ITU-R BT.1358
 } bd_video_format_e;
 
 typedef enum {
@@ -266,7 +264,7 @@ typedef struct bd_mark {
 } BLURAY_TITLE_MARK;
 
 typedef struct bd_title_info {
-    uint32_t             idx;            /* filled only with bd_get_title_info() */
+    uint32_t             idx;
     uint32_t             playlist;
     uint64_t             duration;
     uint32_t             clip_count;

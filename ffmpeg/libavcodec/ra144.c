@@ -1512,7 +1512,7 @@ static void add_wav(int16_t *dest, int n, int skip_first, int *m,
 
     v[0] = 0;
     for (i=!skip_first; i<3; i++)
-        v[i] = (ff_gain_val_tab[n][i] * (unsigned)m[i]) >> ff_gain_exp_tab[n];
+        v[i] = (ff_gain_val_tab[n][i] * m[i]) >> ff_gain_exp_tab[n];
 
     if (v[0]) {
         for (i=0; i < BLOCKSIZE; i++)
@@ -1601,7 +1601,7 @@ void ff_eval_coefs(int *coefs, const int *refl)
         b1[i] = refl[i] * 16;
 
         for (j=0; j < i; j++)
-            b1[j] = ((int)(refl[i] * (unsigned)b2[i-j-1]) >> 12) + b2[j];
+            b1[j] = ((refl[i] * b2[i-j-1]) >> 12) + b2[j];
 
         FFSWAP(int *, b1, b2);
     }

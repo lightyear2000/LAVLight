@@ -483,7 +483,7 @@ static void ogg_write_pages(AVFormatContext *s, int flush)
     ogg->page_list = p;
 }
 
-static int ogg_init(AVFormatContext *s)
+static int ogg_write_header(AVFormatContext *s)
 {
     OGGContext *ogg = s->priv_data;
     OGGStreamContext *oggstream = NULL;
@@ -617,16 +617,8 @@ static int ogg_init(AVFormatContext *s)
         }
     }
 
-    return 0;
-}
-
-static int ogg_write_header(AVFormatContext *s)
-{
-    OGGStreamContext *oggstream = NULL;
-    int i, j;
-
     for (j = 0; j < s->nb_streams; j++) {
-        oggstream = s->streams[j]->priv_data;
+        OGGStreamContext *oggstream = s->streams[j]->priv_data;
         ogg_buffer_data(s, s->streams[j], oggstream->header[0],
                         oggstream->header_len[0], 0, 1);
         oggstream->page.flags |= 2; // bos
@@ -634,7 +626,7 @@ static int ogg_write_header(AVFormatContext *s)
     }
     for (j = 0; j < s->nb_streams; j++) {
         AVStream *st = s->streams[j];
-        oggstream = st->priv_data;
+        OGGStreamContext *oggstream = st->priv_data;
         for (i = 1; i < 3; i++) {
             if (oggstream->header_len[i])
                 ogg_buffer_data(s, st, oggstream->header[i],
@@ -733,18 +725,9 @@ static int ogg_write_trailer(AVFormatContext *s)
 
     ogg_write_pages(s, 1);
 
-    return 0;
-}
-
-static void ogg_free(AVFormatContext *s)
-{
-    int i;
-
     for (i = 0; i < s->nb_streams; i++) {
         AVStream *st = s->streams[i];
         OGGStreamContext *oggstream = st->priv_data;
-        if (!oggstream)
-            continue;
         if (st->codecpar->codec_id == AV_CODEC_ID_FLAC ||
             st->codecpar->codec_id == AV_CODEC_ID_SPEEX ||
             st->codecpar->codec_id == AV_CODEC_ID_OPUS ||
@@ -754,6 +737,7 @@ static void ogg_free(AVFormatContext *s)
         av_freep(&oggstream->header[1]);
         av_freep(&st->priv_data);
     }
+    return 0;
 }
 
 #if CONFIG_OGG_MUXER
@@ -777,11 +761,9 @@ AVOutputFormat ff_ogg_muxer = {
     .audio_codec       = CONFIG_LIBVORBIS_ENCODER ?
                          AV_CODEC_ID_VORBIS : AV_CODEC_ID_FLAC,
     .video_codec       = AV_CODEC_ID_THEORA,
-    .init              = ogg_init,
     .write_header      = ogg_write_header,
     .write_packet      = ogg_write_packet,
     .write_trailer     = ogg_write_trailer,
-    .deinit            = ogg_free,
     .flags             = AVFMT_TS_NEGATIVE | AVFMT_TS_NONSTRICT | AVFMT_ALLOW_FLUSH,
     .priv_class        = &ogg_muxer_class,
 };
@@ -796,11 +778,9 @@ AVOutputFormat ff_oga_muxer = {
     .extensions        = "oga",
     .priv_data_size    = sizeof(OGGContext),
     .audio_codec       = AV_CODEC_ID_FLAC,
-    .init              = ogg_init,
     .write_header      = ogg_write_header,
     .write_packet      = ogg_write_packet,
     .write_trailer     = ogg_write_trailer,
-    .deinit            = ogg_free,
     .flags             = AVFMT_TS_NEGATIVE | AVFMT_ALLOW_FLUSH,
     .priv_class        = &oga_muxer_class,
 };
@@ -818,11 +798,9 @@ AVOutputFormat ff_ogv_muxer = {
                          AV_CODEC_ID_VORBIS : AV_CODEC_ID_FLAC,
     .video_codec       = CONFIG_LIBTHEORA_ENCODER ?
                          AV_CODEC_ID_THEORA : AV_CODEC_ID_VP8,
-    .init              = ogg_init,
     .write_header      = ogg_write_header,
     .write_packet      = ogg_write_packet,
     .write_trailer     = ogg_write_trailer,
-    .deinit            = ogg_free,
     .flags             = AVFMT_TS_NEGATIVE | AVFMT_TS_NONSTRICT | AVFMT_ALLOW_FLUSH,
     .priv_class        = &ogv_muxer_class,
 };
@@ -837,11 +815,9 @@ AVOutputFormat ff_spx_muxer = {
     .extensions        = "spx",
     .priv_data_size    = sizeof(OGGContext),
     .audio_codec       = AV_CODEC_ID_SPEEX,
-    .init              = ogg_init,
     .write_header      = ogg_write_header,
     .write_packet      = ogg_write_packet,
     .write_trailer     = ogg_write_trailer,
-    .deinit            = ogg_free,
     .flags             = AVFMT_TS_NEGATIVE | AVFMT_ALLOW_FLUSH,
     .priv_class        = &spx_muxer_class,
 };
@@ -856,11 +832,9 @@ AVOutputFormat ff_opus_muxer = {
     .extensions        = "opus",
     .priv_data_size    = sizeof(OGGContext),
     .audio_codec       = AV_CODEC_ID_OPUS,
-    .init              = ogg_init,
     .write_header      = ogg_write_header,
     .write_packet      = ogg_write_packet,
     .write_trailer     = ogg_write_trailer,
-    .deinit            = ogg_free,
     .flags             = AVFMT_TS_NEGATIVE | AVFMT_ALLOW_FLUSH,
     .priv_class        = &opus_muxer_class,
 };

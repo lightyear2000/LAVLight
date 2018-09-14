@@ -1,5 +1,5 @@
 dnl library version number
-m4_define([udfread_major], 1)
+m4_define([udfread_major], 0)
 m4_define([udfread_minor], 0)
 m4_define([udfread_micro], 0)
 m4_define([udfread_version],[udfread_major.udfread_minor.udfread_micro])
@@ -13,7 +13,7 @@ dnl
 dnl Library file name will be libbluray.so.(current-age).age.revision
 dnl
 m4_define([lt_current],  0)
-m4_define([lt_revision], 1)
+m4_define([lt_revision], 0)
 m4_define([lt_age],      0)
 
 dnl initilization
@@ -73,7 +73,7 @@ AS_IF([test "${SYS}" != "mingw32"], [
 dnl compiler warnings
 CC_CHECK_CFLAGS_APPEND([-Wall -Wsign-compare -Wextra])
 CC_CHECK_CFLAGS_APPEND([-std=c99 -pedantic])
-CC_CHECK_CFLAGS_APPEND([-Wdisabled-optimization -Wpointer-arith ]dnl
+CC_CHECK_CFLAGS_APPEND([-Wdisabled-optimization -Wpointer-arith]dnl
 [-Wredundant-decls -Wcast-qual -Wwrite-strings -Wtype-limits -Wundef ]dnl
 [-Wmissing-prototypes -Wshadow])
 CC_CHECK_CFLAGS_APPEND([-Werror=implicit-function-declaration ]dnl
@@ -95,8 +95,6 @@ UDFREAD_VERSION_MINOR=udfread_minor()
 AC_SUBST(UDFREAD_VERSION_MINOR)
 UDFREAD_VERSION_MICRO=udfread_micro()
 AC_SUBST(UDFREAD_VERSION_MICRO)
-
-AC_DEFINE([HAVE_UDFREAD_VERSION_H], 1, ["Define to 1 if you have udfread-version.h header file."])
 
 dnl export library (.so) version
 UDFREAD_LTVERSION="lt_current():lt_revision():lt_age()"

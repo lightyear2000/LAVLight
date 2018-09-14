@@ -46,7 +46,6 @@ public:
   // Allocator/memory management
   STDMETHODIMP InitAllocator(IMemAllocator **ppAlloc);
   STDMETHODIMP PostConnect(IPin *pPin);
-  STDMETHODIMP BreakConnect();
 
   // HWAccel Query
   STDMETHODIMP_(BOOL) IsHWDecoderActive() { return m_bHWDecoder; }
@@ -54,7 +53,7 @@ public:
 
   // ILAVDecoder (partial)
   STDMETHODIMP_(const WCHAR*) GetDecoderName() { return m_pDecoder ? m_pDecoder->GetDecoderName() : nullptr; }
-  STDMETHODIMP_(long) GetBufferCount(long *pMaxBuffers) { return m_pDecoder ? m_pDecoder->GetBufferCount(pMaxBuffers) : 4; }
+  STDMETHODIMP_(long) GetBufferCount() { return m_pDecoder ? m_pDecoder->GetBufferCount() : 4; }
   STDMETHODIMP_(BOOL) IsInterlaced(BOOL bAllowGuess) { return m_pDecoder ? m_pDecoder->IsInterlaced(bAllowGuess) : TRUE; }
   STDMETHODIMP GetPixelFormat(LAVPixelFormat *pPix, int *pBpp) { ASSERT(m_pDecoder); return m_pDecoder->GetPixelFormat(pPix, pBpp); }
   STDMETHODIMP_(REFERENCE_TIME) GetFrameDuration() { ASSERT(m_pDecoder); return m_pDecoder->GetFrameDuration(); }

@@ -142,15 +142,8 @@ crc(){
     ffmpeg "$@" -f crc -
 }
 
-md5pipe(){
-    ffmpeg "$@" md5:
-}
-
 md5(){
-    encfile="${outdir}/${test}.out"
-    cleanfiles="$cleanfiles $encfile"
-    ffmpeg "$@" $encfile
-    do_md5sum $encfile | awk '{print $1}'
+    ffmpeg "$@" md5:
 }
 
 pcm(){
@@ -232,15 +225,6 @@ lavftest(){
     t="${test#lavf-}"
     ref=${base}/ref/lavf/$t
     ${base}/lavf-regression.sh $t lavf tests/vsynth1 "$target_exec" "$target_path" "$threads" "$thread_type" "$cpuflags" "$target_samples"
-}
-
-refcmp_metadata(){
-    refcmp=$1
-    pixfmt=$2
-    fuzz=${3:-0.001}
-    ffmpeg $FLAGS $ENC_OPTS \
-        -lavfi "testsrc2=size=300x200:rate=1:duration=5,format=${pixfmt},split[ref][tmp];[tmp]avgblur=4[enc];[enc][ref]${refcmp},metadata=print:file=-" \
-        -f null /dev/null | awk -v ref=${ref} -v fuzz=${fuzz} -f ${base}/refcmp-metadata.awk -
 }
 
 video_filter(){

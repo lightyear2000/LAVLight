@@ -51,8 +51,6 @@ void ff_hevc_unref_frame(HEVCContext *s, HEVCFrame *frame, int flags)
 
         av_buffer_unref(&frame->hwaccel_priv_buf);
         frame->hwaccel_picture_private = NULL;
-
-        frame->missing = 0;
     }
 }
 
@@ -209,9 +207,6 @@ int ff_hevc_output_frame(HEVCContext *s, AVFrame *out, int flush)
 
         if (nb_output) {
             HEVCFrame *frame = &s->DPB[min_idx];
-
-            if (frame->frame->format == AV_PIX_FMT_VIDEOTOOLBOX && frame->frame->buf[0]->size == 1)
-                return 0;
 
             ret = av_frame_ref(out, frame->frame);
             if (frame->flags & HEVC_FRAME_FLAG_BUMPING)
@@ -423,7 +418,6 @@ static HEVCFrame *generate_missing_ref(HEVCContext *s, int poc)
     frame->poc      = poc;
     frame->sequence = s->seq_decode;
     frame->flags    = 0;
-    frame->missing  = 1;
 
     if (s->threads_type == FF_THREAD_FRAME)
         ff_thread_report_progress(&frame->tf, INT_MAX, 0);
@@ -437,7 +431,7 @@ static int add_candidate_ref(HEVCContext *s, RefPicList *list,
 {
     HEVCFrame *ref = find_ref_idx(s, poc);
 
-    if (ref == s->ref || list->nb_refs >= HEVC_MAX_REFS)
+    if (ref == s->ref)
         return AVERROR_INVALIDDATA;
 
     if (!ref) {

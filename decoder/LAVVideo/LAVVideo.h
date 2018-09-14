@@ -145,8 +145,6 @@ public:
   STDMETHODIMP GetHWAccelActiveDevice(BSTR *pstrDeviceName);
 
   // CTransformFilter
-  STDMETHODIMP Stop();
-
   HRESULT CheckInputType(const CMediaType* mtIn);
   HRESULT CheckTransform(const CMediaType* mtIn, const CMediaType* mtOut);
   HRESULT DecideBufferSize(IMemAllocator * pAllocator, ALLOCATOR_PROPERTIES *pprop);
@@ -306,8 +304,6 @@ private:
     BOOL bDVDVideo;
     DWORD HWAccelDeviceDXVA2;
     DWORD HWAccelDeviceDXVA2Desc;
-    DWORD HWAccelDeviceD3D11;
-    DWORD HWAccelDeviceD3D11Desc;
     BOOL bH264MVCOverride;
   } m_settings;
 

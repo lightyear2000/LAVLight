@@ -32,8 +32,7 @@ extern "C" {
 int CBDDemuxer::BDByteStreamRead(void *opaque, uint8_t *buf, int buf_size)
 {
   CBDDemuxer *demux = (CBDDemuxer *)opaque;
-  int ret = bd_read(demux->m_pBD, buf, buf_size);
-  return (ret != 0) ? ret : AVERROR_EOF;
+  return bd_read(demux->m_pBD, buf, buf_size);
 }
 
 int64_t CBDDemuxer::BDByteStreamSeek(void *opaque,  int64_t offset, int whence)
@@ -725,10 +724,6 @@ void CBDDemuxer::ProcessClipInfo(CLPI_CL *clpi, bool overwrite)
             default:
               avstream->codecpar->width = 1920;
               avstream->codecpar->height = 1080;
-              break;
-            case BLURAY_VIDEO_FORMAT_2160P:
-              avstream->codecpar->width = 3840;
-              avstream->codecpar->height = 2160;
               break;
             }
           }

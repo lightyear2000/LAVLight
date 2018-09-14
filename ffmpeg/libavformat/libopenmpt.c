@@ -93,7 +93,14 @@ static int read_header_openmpt(AVFormatContext *s)
     if (!openmpt->module)
             return AVERROR_INVALIDDATA;
 
-    openmpt->channels = av_get_channel_layout_nb_channels(openmpt->layout);
+    openmpt->channels   = av_get_channel_layout_nb_channels(openmpt->layout);
+    openmpt->duration   = openmpt_module_get_duration_seconds(openmpt->module);
+
+    add_meta(s, "artist",  openmpt_module_get_metadata(openmpt->module, "artist"));
+    add_meta(s, "title",   openmpt_module_get_metadata(openmpt->module, "title"));
+    add_meta(s, "encoder", openmpt_module_get_metadata(openmpt->module, "tracker"));
+    add_meta(s, "comment", openmpt_module_get_metadata(openmpt->module, "message"));
+    add_meta(s, "date",    openmpt_module_get_metadata(openmpt->module, "date"));
 
     if (openmpt->subsong >= openmpt_module_get_num_subsongs(openmpt->module)) {
         openmpt_module_destroy(openmpt->module);
@@ -112,14 +119,6 @@ static int read_header_openmpt(AVFormatContext *s)
             return AVERROR(EINVAL);
         }
     }
-
-    openmpt->duration = openmpt_module_get_duration_seconds(openmpt->module);
-
-    add_meta(s, "artist",  openmpt_module_get_metadata(openmpt->module, "artist"));
-    add_meta(s, "title",   openmpt_module_get_metadata(openmpt->module, "title"));
-    add_meta(s, "encoder", openmpt_module_get_metadata(openmpt->module, "tracker"));
-    add_meta(s, "comment", openmpt_module_get_metadata(openmpt->module, "message"));
-    add_meta(s, "date",    openmpt_module_get_metadata(openmpt->module, "date"));
 
     st = avformat_new_stream(s, NULL);
     if (!st) {

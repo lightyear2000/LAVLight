@@ -22,7 +22,7 @@
 
 %include "libavutil/x86/x86util.asm"
 
-SECTION .text
+section .text
 
 ; void get_pixels_8x4_sym_sse2(int16_t *block, const uint8_t *pixels,
 ;                              ptrdiff_t line_size)

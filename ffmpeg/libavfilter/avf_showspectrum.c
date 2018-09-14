@@ -306,7 +306,6 @@ static int config_output(AVFilterLink *outlink)
 
     outlink->w = s->w;
     outlink->h = s->h;
-    outlink->sample_aspect_ratio = (AVRational){1,1};
 
     if (s->legend) {
         s->start_x = log10(inlink->sample_rate) * 25;
@@ -403,7 +402,7 @@ static int config_output(AVFilterLink *outlink)
                          sizeof(*s->window_func_lut));
         if (!s->window_func_lut)
             return AVERROR(ENOMEM);
-        generate_window_func(s->window_func_lut, s->win_size, s->win_func, &overlap);
+        ff_generate_window_func(s->window_func_lut, s->win_size, s->win_func, &overlap);
         if (s->overlap == 1)
             s->overlap = overlap;
         s->hop_size = (1. - s->overlap) * s->win_size;
@@ -423,7 +422,7 @@ static int config_output(AVFilterLink *outlink)
             ff_get_video_buffer(outlink, outlink->w, outlink->h);
         if (!outpicref)
             return AVERROR(ENOMEM);
-        outpicref->sample_aspect_ratio = (AVRational){1,1};
+        outlink->sample_aspect_ratio = (AVRational){1,1};
         for (i = 0; i < outlink->h; i++) {
             memset(outpicref->data[0] + i * outpicref->linesize[0],   0, outlink->w);
             memset(outpicref->data[1] + i * outpicref->linesize[1], 128, outlink->w);

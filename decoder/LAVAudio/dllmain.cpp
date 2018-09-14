@@ -78,19 +78,19 @@ CFactoryTemplate g_Templates[] = {
       nullptr, nullptr
   },
   { 
-      L"LAV Audio Mixer",
+      L"LAV Light Audio Mixer",
       &CLSID_LAVAudioMixingProp,
       CreateInstance<CLAVAudioMixingProp>,
       nullptr, nullptr
   },
   {
-    L"LAV Audio Format Settings",
+    L"LAV Light Audio Format Settings",
       &CLSID_LAVAudioFormatsProp,
       CreateInstance<CLAVAudioFormatsProp>,
       nullptr, nullptr
   },
   {
-      L"LAV Audio Status",
+      L"LAV Light Audio Status",
       &CLSID_LAVAudioStatusProp,
       CreateInstance<CLAVAudioStatusProp>,
       nullptr, nullptr

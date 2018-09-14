@@ -1,7 +1,6 @@
 /*
  * Blackmagic DeckLink common code
  * Copyright (c) 2013-2014 Ramiro Polla, Luca Barbato, Deti Fliegl
- * Copyright (c) 2017 Akamai Technologies, Inc.
  *
  * This file is part of FFmpeg.
  *
@@ -39,7 +38,6 @@ typedef struct AVPacketQueue {
     pthread_mutex_t mutex;
     pthread_cond_t cond;
     AVFormatContext *avctx;
-    int64_t max_q_size;
 } AVPacketQueue;
 
 struct decklink_ctx {

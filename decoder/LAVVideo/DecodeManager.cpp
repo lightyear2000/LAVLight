@@ -71,8 +71,6 @@ ILAVDecoder * CDecodeManager::CreateHWAccelDecoder(LAVHWAccel hwAccel)
     pDecoder = CreateDecoderDXVA2();
   else if (hwAccel == HWAccel_DXVA2Native)
     pDecoder = CreateDecoderDXVA2Native();
-  else if (hwAccel == HWAccel_D3D11)
-    pDecoder = CreateDecoderD3D11();
 
   return pDecoder;
 }
@@ -113,7 +111,10 @@ softwaredec:
     DbgLog((LOG_TRACE, 10, L"-> No HW Codec, using Software"));
     m_bHWDecoder = FALSE;
     if (m_pLAVVideo->GetUseMSWMV9Decoder() && (codec == AV_CODEC_ID_VC1 || codec == AV_CODEC_ID_WMV3) && !m_bWMV9Failed) {
-      m_pDecoder = CreateDecoderWMV9MFT();
+      if (IsWindows7OrNewer())
+        m_pDecoder = CreateDecoderWMV9MFT();
+      else
+        m_pDecoder = CreateDecoderWMV9();
       bWMV9 = TRUE;
     } else if (codec == AV_CODEC_ID_H264_MVC) {
       m_pDecoder = CreateDecoderMSDKMVC();
@@ -143,7 +144,7 @@ done:
       goto softwaredec;
     }
     if (bWMV9) {
-      DbgLog((LOG_TRACE, 10, L"-> WMV9 MFT decoder failed, trying avcodec instead..."));
+      DbgLog((LOG_TRACE, 10, L"-> WMV9 DMO decoder failed, trying avcodec instead..."));
       m_bWMV9Failed = TRUE;
       bWMV9 = FALSE;
       goto softwaredec;
@@ -173,7 +174,7 @@ STDMETHODIMP CDecodeManager::Decode(IMediaSample *pSample)
     m_bHWDecoderFailed = TRUE;
 
     // If we're disabling DXVA2 Native decoding, we need to release resources now
-    if (wcscmp(m_pDecoder->GetDecoderName(), L"dxva2n") == 0 || wcscmp(m_pDecoder->GetDecoderName(), L"d3d11 native") == 0) {
+    if (wcscmp(m_pDecoder->GetDecoderName(), L"dxva2n") == 0) {
       m_pLAVVideo->ReleaseAllDXVAResources();
       m_pLAVVideo->GetOutputPin()->GetConnected()->BeginFlush();
       m_pLAVVideo->GetOutputPin()->GetConnected()->EndFlush();
@@ -235,14 +236,4 @@ STDMETHODIMP CDecodeManager::PostConnect(IPin *pPin)
     }
   }
   return hr;
-}
-
-STDMETHODIMP CDecodeManager::BreakConnect()
-{
-  CAutoLock decoderLock(this);
-
-  if (!m_pDecoder)
-    return E_UNEXPECTED;
-
-  return m_pDecoder->BreakConnect();
 }

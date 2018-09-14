@@ -662,32 +662,32 @@ const char *get_channel_desc(DWORD dwFlag)
 // Order is Important, has to be the same as typedef enum LAVAudioCodec in LAVAudioSettings.h
 // Also, the order is used for storage in the Registry
 static codec_config_t m_codec_config[] = {
-	{ 2,{ AV_CODEC_ID_AAC, AV_CODEC_ID_AAC_LATM } },       // CC_AAC
-	{ 1,{ AV_CODEC_ID_AC3 } },                          // CC_AC3
-	//{ 1,{ AV_CODEC_ID_EAC3 } },                         // CC_EAC3
-	{ 1,{ AV_CODEC_ID_DTS }, "dts", "DTS Coherent Acoustics (DTS, DTS-HD)" },                          // CC_DTS
-	{ 2,{ AV_CODEC_ID_MP2, AV_CODEC_ID_MP1 } },            // CC_MP2
-	{ 1,{ AV_CODEC_ID_MP3 } },                          // CC_MP3
-	//{ 2,{ AV_CODEC_ID_TRUEHD, AV_CODEC_ID_MLP } },         // CC_TRUEHD
-	{ 1,{ AV_CODEC_ID_FLAC } },                         // CC_FLAC
-	{ 1,{ AV_CODEC_ID_VORBIS } },                       // CC_VORBIS
-	{ 2,{ AV_CODEC_ID_PCM_BLURAY, AV_CODEC_ID_PCM_DVD }, "lpcm", "Linear PCM (BluRay & DVD)" }, // CC_LPCM
-	{ 1,{ AV_CODEC_ID_NONE }, "pcm", "Raw PCM Types (including QT PCM)" }, // CC_LPCM
-	{ 1,{ AV_CODEC_ID_WAVPACK } },                      // CC_WAVPACK
-	{ 1,{ AV_CODEC_ID_TTA } },                          // CC_TTA
-	{ 2,{ AV_CODEC_ID_WMAV2, AV_CODEC_ID_WMAV1 }, "wma", "Windows Media Audio 1/2" }, // CC_WMA2
-	{ 1,{ AV_CODEC_ID_WMAPRO } },                       // CC_WMAPRO
-	{ 1,{ AV_CODEC_ID_COOK } },                         // CC_COOK
-	{ 4,{ AV_CODEC_ID_SIPR, AV_CODEC_ID_RA_144, AV_CODEC_ID_RA_288, AV_CODEC_ID_RALF }, "realaudio", "Real Audio (SIPR, RALF, 14.4 28.8)" }, // CC_REAL
-	{ 1,{ AV_CODEC_ID_WMALOSSLESS } },                  // CC_WMALL
-	{ 1,{ AV_CODEC_ID_ALAC } },                         // CC_ALAC
-	{ 1,{ AV_CODEC_ID_OPUS }, "opus", "Opus Audio Codec" }, // CC_OPUS
-	{ 2,{ AV_CODEC_ID_AMR_NB, AV_CODEC_ID_AMR_WB }, "amr", "AMR-NB/WB (Adaptive Multi-Rate NarrowBand/WideBand)" }, // CC_AMR
-	{ 1,{ AV_CODEC_ID_NELLYMOSER } },                   // CC_Nellymoser
-	{ 4,{ AV_CODEC_ID_PCM_ALAW, AV_CODEC_ID_PCM_MULAW, AV_CODEC_ID_GSM_MS, AV_CODEC_ID_ADPCM_MS }, "mspcm", "Microsoft PCM (A-Law, muLaw, MS-GSM, MS ADPCM)" }, // CC_MSPCM
-	{ 1,{ AV_CODEC_ID_TRUESPEECH } },                   // CC_Truespeech
-	{ 1,{ AV_CODEC_ID_TAK } },                          // CC_TAK
-	{ 3,{ AV_CODEC_ID_ATRAC1, AV_CODEC_ID_ATRAC3, AV_CODEC_ID_ATRAC3P }, "atrac", "ATRAC (Adaptive TRansform Acoustic Coding)" }, // CC_ATRAC
+  { 2, { AV_CODEC_ID_AAC, AV_CODEC_ID_AAC_LATM }},       // CC_AAC
+  { 1, { AV_CODEC_ID_AC3 }},                          // CC_AC3
+  //{ 1, { AV_CODEC_ID_EAC3 }},                         // CC_EAC3
+  { 1, { AV_CODEC_ID_DTS }, "dts", "DTS Coherent Acoustics (DTS, DTS-HD)"},                          // CC_DTS
+  { 2, { AV_CODEC_ID_MP2, AV_CODEC_ID_MP1 }},            // CC_MP2
+  { 1, { AV_CODEC_ID_MP3 }},                          // CC_MP3
+  //{ 2, { AV_CODEC_ID_TRUEHD, AV_CODEC_ID_MLP }},         // CC_TRUEHD
+  { 1, { AV_CODEC_ID_FLAC }},                         // CC_FLAC
+  { 1, { AV_CODEC_ID_VORBIS }},                       // CC_VORBIS
+  { 2, { AV_CODEC_ID_PCM_BLURAY, AV_CODEC_ID_PCM_DVD }, "lpcm", "Linear PCM (BluRay & DVD)"}, // CC_LPCM
+  { 1, { AV_CODEC_ID_NONE }, "pcm", "Raw PCM Types (including QT PCM)" }, // CC_LPCM
+  { 1, { AV_CODEC_ID_WAVPACK }},                      // CC_WAVPACK
+  { 1, { AV_CODEC_ID_TTA }},                          // CC_TTA
+  { 2, { AV_CODEC_ID_WMAV2, AV_CODEC_ID_WMAV1 }, "wma", "Windows Media Audio 1/2"}, // CC_WMA2
+  { 1, { AV_CODEC_ID_WMAPRO }},                       // CC_WMAPRO
+  { 1, { AV_CODEC_ID_COOK }},                         // CC_COOK
+  { 4, { AV_CODEC_ID_SIPR, AV_CODEC_ID_RA_144, AV_CODEC_ID_RA_288, AV_CODEC_ID_RALF }, "realaudio", "Real Audio (SIPR, RALF, 14.4 28.8)" }, // CC_REAL
+  { 1, { AV_CODEC_ID_WMALOSSLESS }},                  // CC_WMALL
+  { 1, { AV_CODEC_ID_ALAC }},                         // CC_ALAC
+  { 1, { AV_CODEC_ID_OPUS }, "opus", "Opus Audio Codec"}, // CC_OPUS
+  { 2, { AV_CODEC_ID_AMR_NB, AV_CODEC_ID_AMR_WB }, "amr", "AMR-NB/WB (Adaptive Multi-Rate NarrowBand/WideBand)" }, // CC_AMR
+  { 1, { AV_CODEC_ID_NELLYMOSER }},                   // CC_Nellymoser
+  { 4, { AV_CODEC_ID_PCM_ALAW, AV_CODEC_ID_PCM_MULAW, AV_CODEC_ID_GSM_MS, AV_CODEC_ID_ADPCM_MS }, "mspcm", "Microsoft PCM (A-Law, muLaw, MS-GSM, MS ADPCM)" }, // CC_MSPCM
+  { 1, { AV_CODEC_ID_TRUESPEECH }},                   // CC_Truespeech
+  { 1, { AV_CODEC_ID_TAK }},                          // CC_TAK
+  { 3, { AV_CODEC_ID_ATRAC1, AV_CODEC_ID_ATRAC3, AV_CODEC_ID_ATRAC3P }, "atrac", "ATRAC (Adaptive TRansform Acoustic Coding)"}, // CC_ATRAC
 };
 
 const codec_config_t *get_codec_config(LAVAudioCodec codec)

@@ -241,7 +241,6 @@ static struct PixelFormatMapping {
   { AV_PIX_FMT_P016LE, LAVPixFmt_P016, FALSE, 16 },
 
   { AV_PIX_FMT_DXVA2_VLD, LAVPixFmt_DXVA2, FALSE },
-  { AV_PIX_FMT_D3D11, LAVPixFmt_D3D11, FALSE },
 };
 
 static AVCodecID ff_interlace_capable[] = {
@@ -352,7 +351,7 @@ STDMETHODIMP CDecAvcodec::InitDecoder(AVCodecID codec, const CMediaType *pmt)
   m_pAVCtx->coded_height          = abs(pBMI->biHeight);
   m_pAVCtx->bits_per_coded_sample = pBMI->biBitCount;
   m_pAVCtx->err_recognition       = 0;
-  m_pAVCtx->workaround_bugs       = FF_BUG_AUTODETECT;
+  m_pAVCtx->workaround_bugs       = FF_BUG_AUTODETECT | FF_BUG_X264_LOSSLESS;
   m_pAVCtx->refcounted_frames     = 1;
 
   // Setup threading
@@ -576,10 +575,6 @@ STDMETHODIMP CDecAvcodec::InitDecoder(AVCodecID codec, const CMediaType *pmt)
     return VFW_E_UNSUPPORTED_VIDEO;
   }
 
-  if (codec == AV_CODEC_ID_H264 && m_nx264build != -1) {
-    av_opt_set_int(m_pAVCtx->priv_data, "x264_build", m_nx264build, 0);
-  }
-
   m_iInterlaced = 0;
   for (int i = 0; i < countof(ff_interlace_capable); i++) {
     if (codec == ff_interlace_capable[i]) {
@@ -638,12 +633,6 @@ STDMETHODIMP CDecAvcodec::DestroyDecoder()
   }
 
   if (m_pAVCtx) {
-    if (m_pAVCtx->codec_id == AV_CODEC_ID_H264) {
-      int64_t x264build = -1;
-      if (av_opt_get_int(m_pAVCtx->priv_data, "x264_build", 0, &x264build) >= 0)
-        m_nx264build = (int)x264build;
-    }
-
     avcodec_close(m_pAVCtx);
     av_freep(&m_pAVCtx->hwaccel_context);
     av_freep(&m_pAVCtx->extradata);
@@ -1130,15 +1119,13 @@ send_packet:
     if (pOutFrame->format == LAVPixFmt_DXVA2) {
       pOutFrame->data[0] = m_pFrame->data[4];
       HandleDXVA2Frame(pOutFrame);
-    } else if (pOutFrame->format == LAVPixFmt_D3D11) {
-      HandleDXVA2Frame(pOutFrame);
     } else {
       Deliver(pOutFrame);
     }
 
     if (bEndOfSequence) {
       bEndOfSequence = FALSE;
-      if (pOutFrame->format == LAVPixFmt_DXVA2 || pOutFrame->format == LAVPixFmt_D3D11) {
+      if (pOutFrame->format == LAVPixFmt_DXVA2) {
         HandleDXVA2Frame(m_pCallback->GetFlushFrame());
       } else {
         Deliver(m_pCallback->GetFlushFrame());

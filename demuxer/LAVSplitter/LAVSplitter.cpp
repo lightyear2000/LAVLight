@@ -1492,15 +1492,15 @@ std::list<CSubtitleSelector> CLAVSplitter::GetSubtitleSelectors()
   // Add the "off" termination element
   tokenList.push_back("*:off");
 
-  std::regex advRegex(
-                      "(?:(\\*|[[:alpha:]]+):)?"        // audio language
-                      "(\\*|[[:alpha:]]+)"              // subtitle language
-                      "(?:\\|(!?)([fdnh]+))?"           // flags
-                      "(?:@([^" + separators + "]+))?"  // subtitle track name substring
-                    );
+  std::tr1::regex advRegex(
+                            "(?:(\\*|[[:alpha:]]+):)?"        // audio language
+                            "(\\*|[[:alpha:]]+)"              // subtitle language
+                            "(?:\\|(!?)([fdnh]+))?"           // flags
+                            "(?:@([^" + separators + "]+))?"  // subtitle track name substring
+                          );
   for (const std::string& token : tokenList) {
-    std::cmatch res;
-    bool found = std::regex_search(token.c_str(), res, advRegex);
+    std::tr1::cmatch res;
+    bool found = std::tr1::regex_search(token.c_str(), res, advRegex);
     if (found) {
       CSubtitleSelector selector;
       selector.audioLanguage = res[1].str().empty() ? "*" : ProbeForISO6392(res[1].str().c_str());

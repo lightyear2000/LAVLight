@@ -116,8 +116,6 @@ typedef struct NvencContext
     AVFifoBuffer *output_surface_ready_queue;
     AVFifoBuffer *timestamp_list;
 
-    int encoder_flushing;
-
     struct {
         CUdeviceptr ptr;
         NV_ENC_REGISTERED_PTR regptr;
@@ -164,16 +162,11 @@ typedef struct NvencContext
     int init_qp_i;
     int cqp;
     int weighted_pred;
-    int coder;
 } NvencContext;
 
 int ff_nvenc_encode_init(AVCodecContext *avctx);
 
 int ff_nvenc_encode_close(AVCodecContext *avctx);
-
-int ff_nvenc_send_frame(AVCodecContext *avctx, const AVFrame *frame);
-
-int ff_nvenc_receive_packet(AVCodecContext *avctx, AVPacket *pkt);
 
 int ff_nvenc_encode_frame(AVCodecContext *avctx, AVPacket *pkt,
                           const AVFrame *frame, int *got_packet);

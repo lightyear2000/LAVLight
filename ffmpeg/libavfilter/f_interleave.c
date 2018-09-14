@@ -110,7 +110,7 @@ static av_cold int init(AVFilterContext *ctx)
 {
     InterleaveContext *s = ctx->priv;
     const AVFilterPad *outpad = &ctx->filter->outputs[0];
-    int i, ret;
+    int i;
 
     s->queues = av_calloc(s->nb_inputs, sizeof(s->queues[0]));
     if (!s->queues)
@@ -133,10 +133,7 @@ static av_cold int init(AVFilterContext *ctx)
         default:
             av_assert0(0);
         }
-        if ((ret = ff_insert_inpad(ctx, i, &inpad)) < 0) {
-            av_freep(&inpad.name);
-            return ret;
-        }
+        ff_insert_inpad(ctx, i, &inpad);
     }
 
     return 0;

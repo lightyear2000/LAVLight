@@ -112,16 +112,6 @@ static int nvenc_print_error(void *log_ctx, NVENCSTATUS err,
     return ret;
 }
 
-static void nvenc_print_driver_requirement(AVCodecContext *avctx, int level)
-{
-#if defined(_WIN32) || defined(__CYGWIN__)
-    const char *minver = "378.66";
-#else
-    const char *minver = "378.13";
-#endif
-    av_log(avctx, level, "The minimum required Nvidia driver for nvenc is %s or newer\n", minver);
-}
-
 static av_cold int nvenc_load_libraries(AVCodecContext *avctx)
 {
     NvencContext *ctx            = avctx->priv_data;
@@ -135,10 +125,8 @@ static av_cold int nvenc_load_libraries(AVCodecContext *avctx)
         return ret;
 
     ret = nvenc_load_functions(&dl_fn->nvenc_dl);
-    if (ret < 0) {
-        nvenc_print_driver_requirement(avctx, AV_LOG_ERROR);
+    if (ret < 0)
         return ret;
-    }
 
     err = dl_fn->nvenc_dl->NvEncodeAPIGetMaxSupportedVersion(&nvenc_max_ver);
     if (err != NV_ENC_SUCCESS)
@@ -151,7 +139,6 @@ static av_cold int nvenc_load_libraries(AVCodecContext *avctx)
                "Required: %d.%d Found: %d.%d\n",
                NVENCAPI_MAJOR_VERSION, NVENCAPI_MINOR_VERSION,
                nvenc_max_ver >> 4, nvenc_max_ver & 0xf);
-        nvenc_print_driver_requirement(avctx, AV_LOG_ERROR);
         return AVERROR(ENOSYS);
     }
 
@@ -317,12 +304,6 @@ static int nvenc_check_capabilities(AVCodecContext *avctx)
         return AVERROR(ENOSYS);
     }
 
-    ret = nvenc_check_cap(avctx, NV_ENC_CAPS_SUPPORT_CABAC);
-    if (ctx->coder == NV_ENC_H264_ENTROPY_CODING_MODE_CABAC && ret <= 0) {
-        av_log(avctx, AV_LOG_VERBOSE, "CABAC entropy coding not supported\n");
-        return AVERROR(ENOSYS);
-    }
-
     return 0;
 }
 
@@ -398,20 +379,8 @@ static av_cold int nvenc_check_device(AVCodecContext *avctx, int idx)
         return 0;
 
 fail3:
-    cu_res = dl_fn->cuda_dl->cuCtxPushCurrent(ctx->cu_context);
-    if (cu_res != CUDA_SUCCESS) {
-        av_log(avctx, AV_LOG_ERROR, "cuCtxPushCurrent failed\n");
-        return AVERROR_EXTERNAL;
-    }
-
     p_nvenc->nvEncDestroyEncoder(ctx->nvencoder);
     ctx->nvencoder = NULL;
-
-    cu_res = dl_fn->cuda_dl->cuCtxPopCurrent(&dummy);
-    if (cu_res != CUDA_SUCCESS) {
-        av_log(avctx, AV_LOG_ERROR, "cuCtxPopCurrent failed\n");
-        return AVERROR_EXTERNAL;
-    }
 
 fail2:
     dl_fn->cuda_dl->cuCtxDestroy(ctx->cu_context_internal);
@@ -879,9 +848,8 @@ static av_cold int nvenc_setup_h264_config(AVCodecContext *avctx)
 
     if (IS_CBR(cc->rcParams.rateControlMode)) {
         h264->outputBufferingPeriodSEI = 1;
+        h264->outputPictureTimingSEI   = 1;
     }
-
-    h264->outputPictureTimingSEI = 1;
 
     if (cc->rcParams.rateControlMode == NV_ENC_PARAMS_RC_CBR_LOWDELAY_HQ ||
         cc->rcParams.rateControlMode == NV_ENC_PARAMS_RC_CBR_HQ ||
@@ -922,9 +890,6 @@ static av_cold int nvenc_setup_h264_config(AVCodecContext *avctx)
     h264->chromaFormatIDC = avctx->profile == FF_PROFILE_H264_HIGH_444_PREDICTIVE ? 3 : 1;
 
     h264->level = ctx->level;
-
-    if (ctx->coder >= 0)
-        h264->entropyCodingMode = ctx->coder;
 
     return 0;
 }
@@ -967,9 +932,8 @@ static av_cold int nvenc_setup_hevc_config(AVCodecContext *avctx)
 
     if (IS_CBR(cc->rcParams.rateControlMode)) {
         hevc->outputBufferingPeriodSEI = 1;
+        hevc->outputPictureTimingSEI   = 1;
     }
-
-    hevc->outputPictureTimingSEI = 1;
 
     switch (ctx->profile) {
     case NV_ENC_HEVC_PROFILE_MAIN:
@@ -1031,8 +995,6 @@ static av_cold int nvenc_setup_encoder(AVCodecContext *avctx)
     NV_ENC_PRESET_CONFIG preset_config = { 0 };
     NVENCSTATUS nv_status = NV_ENC_SUCCESS;
     AVCPBProperties *cpb_props;
-    CUresult cu_res;
-    CUcontext dummy;
     int res = 0;
     int dw, dh;
 
@@ -1123,20 +1085,7 @@ static av_cold int nvenc_setup_encoder(AVCodecContext *avctx)
     if (res)
         return res;
 
-    cu_res = dl_fn->cuda_dl->cuCtxPushCurrent(ctx->cu_context);
-    if (cu_res != CUDA_SUCCESS) {
-        av_log(avctx, AV_LOG_ERROR, "cuCtxPushCurrent failed\n");
-        return AVERROR_EXTERNAL;
-    }
-
     nv_status = p_nvenc->nvEncInitializeEncoder(ctx->nvencoder, &ctx->init_encode_params);
-
-    cu_res = dl_fn->cuda_dl->cuCtxPopCurrent(&dummy);
-    if (cu_res != CUDA_SUCCESS) {
-        av_log(avctx, AV_LOG_ERROR, "cuCtxPopCurrent failed\n");
-        return AVERROR_EXTERNAL;
-    }
-
     if (nv_status != NV_ENC_SUCCESS) {
         return nvenc_print_error(avctx, nv_status, "InitializeEncoder failed");
     }
@@ -1239,9 +1188,6 @@ static av_cold int nvenc_alloc_surface(AVCodecContext *avctx, int idx)
 static av_cold int nvenc_setup_surfaces(AVCodecContext *avctx)
 {
     NvencContext *ctx = avctx->priv_data;
-    NvencDynLoadFunctions *dl_fn = &ctx->nvenc_dload_funcs;
-    CUresult cu_res;
-    CUcontext dummy;
     int i, res;
 
     ctx->surfaces = av_mallocz_array(ctx->nb_surfaces, sizeof(*ctx->surfaces));
@@ -1263,28 +1209,9 @@ static av_cold int nvenc_setup_surfaces(AVCodecContext *avctx)
     if (!ctx->output_surface_ready_queue)
         return AVERROR(ENOMEM);
 
-    cu_res = dl_fn->cuda_dl->cuCtxPushCurrent(ctx->cu_context);
-    if (cu_res != CUDA_SUCCESS) {
-        av_log(avctx, AV_LOG_ERROR, "cuCtxPushCurrent failed\n");
-        return AVERROR_EXTERNAL;
-    }
-
     for (i = 0; i < ctx->nb_surfaces; i++) {
         if ((res = nvenc_alloc_surface(avctx, i)) < 0)
-        {
-            cu_res = dl_fn->cuda_dl->cuCtxPopCurrent(&dummy);
-            if (cu_res != CUDA_SUCCESS) {
-                av_log(avctx, AV_LOG_ERROR, "cuCtxPopCurrent failed\n");
-                return AVERROR_EXTERNAL;
-            }
             return res;
-        }
-    }
-
-    cu_res = dl_fn->cuda_dl->cuCtxPopCurrent(&dummy);
-    if (cu_res != CUDA_SUCCESS) {
-        av_log(avctx, AV_LOG_ERROR, "cuCtxPopCurrent failed\n");
-        return AVERROR_EXTERNAL;
     }
 
     return 0;
@@ -1328,20 +1255,12 @@ av_cold int ff_nvenc_encode_close(AVCodecContext *avctx)
     NvencContext *ctx               = avctx->priv_data;
     NvencDynLoadFunctions *dl_fn = &ctx->nvenc_dload_funcs;
     NV_ENCODE_API_FUNCTION_LIST *p_nvenc = &dl_fn->nvenc_funcs;
-    CUresult cu_res;
-    CUcontext dummy;
     int i;
 
     /* the encoder has to be flushed before it can be closed */
     if (ctx->nvencoder) {
         NV_ENC_PIC_PARAMS params        = { .version        = NV_ENC_PIC_PARAMS_VER,
                                             .encodePicFlags = NV_ENC_PIC_FLAG_EOS };
-
-        cu_res = dl_fn->cuda_dl->cuCtxPushCurrent(ctx->cu_context);
-        if (cu_res != CUDA_SUCCESS) {
-            av_log(avctx, AV_LOG_ERROR, "cuCtxPushCurrent failed\n");
-            return AVERROR_EXTERNAL;
-        }
 
         p_nvenc->nvEncEncodePicture(ctx->nvencoder, &params);
     }
@@ -1375,15 +1294,8 @@ av_cold int ff_nvenc_encode_close(AVCodecContext *avctx)
     av_freep(&ctx->surfaces);
     ctx->nb_surfaces = 0;
 
-    if (ctx->nvencoder) {
+    if (ctx->nvencoder)
         p_nvenc->nvEncDestroyEncoder(ctx->nvencoder);
-
-        cu_res = dl_fn->cuda_dl->cuCtxPopCurrent(&dummy);
-        if (cu_res != CUDA_SUCCESS) {
-            av_log(avctx, AV_LOG_ERROR, "cuCtxPopCurrent failed\n");
-            return AVERROR_EXTERNAL;
-        }
-    }
     ctx->nvencoder = NULL;
 
     if (ctx->cu_context_internal)
@@ -1807,12 +1719,13 @@ static int output_ready(AVCodecContext *avctx, int flush)
     return (nb_ready > 0) && (nb_ready + nb_pending >= ctx->async_depth);
 }
 
-int ff_nvenc_send_frame(AVCodecContext *avctx, const AVFrame *frame)
+int ff_nvenc_encode_frame(AVCodecContext *avctx, AVPacket *pkt,
+                          const AVFrame *frame, int *got_packet)
 {
     NVENCSTATUS nv_status;
     CUresult cu_res;
     CUcontext dummy;
-    NvencSurface *tmp_out_surf, *in_surf;
+    NvencSurface *tmpoutsurf, *inSurf;
     int res;
 
     NvencContext *ctx = avctx->priv_data;
@@ -1822,16 +1735,12 @@ int ff_nvenc_send_frame(AVCodecContext *avctx, const AVFrame *frame)
     NV_ENC_PIC_PARAMS pic_params = { 0 };
     pic_params.version = NV_ENC_PIC_PARAMS_VER;
 
-    if (!ctx->cu_context || !ctx->nvencoder)
-        return AVERROR(EINVAL);
-
-    if (ctx->encoder_flushing)
-        return AVERROR_EOF;
-
     if (frame) {
-        in_surf = get_free_frame(ctx);
-        if (!in_surf)
-            return AVERROR(EAGAIN);
+        inSurf = get_free_frame(ctx);
+        if (!inSurf) {
+            av_log(avctx, AV_LOG_ERROR, "No free surfaces\n");
+            return AVERROR_BUG;
+        }
 
         cu_res = dl_fn->cuda_dl->cuCtxPushCurrent(ctx->cu_context);
         if (cu_res != CUDA_SUCCESS) {
@@ -1839,7 +1748,7 @@ int ff_nvenc_send_frame(AVCodecContext *avctx, const AVFrame *frame)
             return AVERROR_EXTERNAL;
         }
 
-        res = nvenc_upload_frame(avctx, frame, in_surf);
+        res = nvenc_upload_frame(avctx, frame, inSurf);
 
         cu_res = dl_fn->cuda_dl->cuCtxPopCurrent(&dummy);
         if (cu_res != CUDA_SUCCESS) {
@@ -1847,15 +1756,16 @@ int ff_nvenc_send_frame(AVCodecContext *avctx, const AVFrame *frame)
             return AVERROR_EXTERNAL;
         }
 
-        if (res)
+        if (res) {
             return res;
+        }
 
-        pic_params.inputBuffer = in_surf->input_surface;
-        pic_params.bufferFmt = in_surf->format;
-        pic_params.inputWidth = in_surf->width;
-        pic_params.inputHeight = in_surf->height;
-        pic_params.inputPitch = in_surf->pitch;
-        pic_params.outputBitstream = in_surf->output_surface;
+        pic_params.inputBuffer = inSurf->input_surface;
+        pic_params.bufferFmt = inSurf->format;
+        pic_params.inputWidth = inSurf->width;
+        pic_params.inputHeight = inSurf->height;
+        pic_params.inputPitch = inSurf->pitch;
+        pic_params.outputBitstream = inSurf->output_surface;
 
         if (avctx->flags & AV_CODEC_FLAG_INTERLACED_DCT) {
             if (frame->top_field_first)
@@ -1878,7 +1788,6 @@ int ff_nvenc_send_frame(AVCodecContext *avctx, const AVFrame *frame)
         nvenc_codec_specific_pic_params(avctx, &pic_params);
     } else {
         pic_params.encodePicFlags = NV_ENC_PIC_FLAG_EOS;
-        ctx->encoder_flushing = 1;
     }
 
     cu_res = dl_fn->cuda_dl->cuCtxPushCurrent(ctx->cu_context);
@@ -1900,7 +1809,7 @@ int ff_nvenc_send_frame(AVCodecContext *avctx, const AVFrame *frame)
         return nvenc_print_error(avctx, nv_status, "EncodePicture failed!");
 
     if (frame) {
-        av_fifo_generic_write(ctx->output_surface_queue, &in_surf, sizeof(in_surf), NULL);
+        av_fifo_generic_write(ctx->output_surface_queue, &inSurf, sizeof(inSurf), NULL);
         timestamp_queue_enqueue(ctx->timestamp_list, frame->pts);
 
         if (ctx->initial_pts[0] == AV_NOPTS_VALUE)
@@ -1912,76 +1821,24 @@ int ff_nvenc_send_frame(AVCodecContext *avctx, const AVFrame *frame)
     /* all the pending buffers are now ready for output */
     if (nv_status == NV_ENC_SUCCESS) {
         while (av_fifo_size(ctx->output_surface_queue) > 0) {
-            av_fifo_generic_read(ctx->output_surface_queue, &tmp_out_surf, sizeof(tmp_out_surf), NULL);
-            av_fifo_generic_write(ctx->output_surface_ready_queue, &tmp_out_surf, sizeof(tmp_out_surf), NULL);
+            av_fifo_generic_read(ctx->output_surface_queue, &tmpoutsurf, sizeof(tmpoutsurf), NULL);
+            av_fifo_generic_write(ctx->output_surface_ready_queue, &tmpoutsurf, sizeof(tmpoutsurf), NULL);
         }
     }
 
-    return 0;
-}
+    if (output_ready(avctx, !frame)) {
+        av_fifo_generic_read(ctx->output_surface_ready_queue, &tmpoutsurf, sizeof(tmpoutsurf), NULL);
 
-int ff_nvenc_receive_packet(AVCodecContext *avctx, AVPacket *pkt)
-{
-    CUresult cu_res;
-    CUcontext dummy;
-    NvencSurface *tmp_out_surf;
-    int res;
-
-    NvencContext *ctx = avctx->priv_data;
-    NvencDynLoadFunctions *dl_fn = &ctx->nvenc_dload_funcs;
-
-    if (!ctx->cu_context || !ctx->nvencoder)
-        return AVERROR(EINVAL);
-
-    if (output_ready(avctx, ctx->encoder_flushing)) {
-        av_fifo_generic_read(ctx->output_surface_ready_queue, &tmp_out_surf, sizeof(tmp_out_surf), NULL);
-
-        cu_res = dl_fn->cuda_dl->cuCtxPushCurrent(ctx->cu_context);
-        if (cu_res != CUDA_SUCCESS) {
-            av_log(avctx, AV_LOG_ERROR, "cuCtxPushCurrent failed\n");
-            return AVERROR_EXTERNAL;
-        }
-
-        res = process_output_surface(avctx, pkt, tmp_out_surf);
-
-        cu_res = dl_fn->cuda_dl->cuCtxPopCurrent(&dummy);
-        if (cu_res != CUDA_SUCCESS) {
-            av_log(avctx, AV_LOG_ERROR, "cuCtxPopCurrent failed\n");
-            return AVERROR_EXTERNAL;
-        }
+        res = process_output_surface(avctx, pkt, tmpoutsurf);
 
         if (res)
             return res;
 
-        av_fifo_generic_write(ctx->unused_surface_queue, &tmp_out_surf, sizeof(tmp_out_surf), NULL);
-    } else if (ctx->encoder_flushing) {
-        return AVERROR_EOF;
-    } else {
-        return AVERROR(EAGAIN);
-    }
+        av_fifo_generic_write(ctx->unused_surface_queue, &tmpoutsurf, sizeof(tmpoutsurf), NULL);
 
-    return 0;
-}
-
-int ff_nvenc_encode_frame(AVCodecContext *avctx, AVPacket *pkt,
-                          const AVFrame *frame, int *got_packet)
-{
-    NvencContext *ctx = avctx->priv_data;
-    int res;
-
-    if (!ctx->encoder_flushing) {
-        res = ff_nvenc_send_frame(avctx, frame);
-        if (res < 0)
-            return res;
-    }
-
-    res = ff_nvenc_receive_packet(avctx, pkt);
-    if (res == AVERROR(EAGAIN) || res == AVERROR_EOF) {
-        *got_packet = 0;
-    } else if (res < 0) {
-        return res;
-    } else {
         *got_packet = 1;
+    } else {
+        *got_packet = 0;
     }
 
     return 0;

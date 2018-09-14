@@ -206,8 +206,8 @@ static int read_high_coeffs(AVCodecContext *avctx, uint8_t *src, int16_t *dst, i
     if ((ret = init_get_bits8(b, src, bytestream2_get_bytes_left(&ctx->gb))) < 0)
       return ret;
 
-    if (a ^ (a >> 31)) {
-        nbits = 33 - ff_clz(a ^ (a >> 31));
+    if ((a >= 0) + (a ^ (a >> 31)) - (a >> 31) != 1) {
+        nbits = 33 - ff_clz((a >= 0) + (a ^ (a >> 31)) - (a >> 31) - 1);
         if (nbits > 16)
             return AVERROR_INVALIDDATA;
     } else {
@@ -262,7 +262,7 @@ static int read_high_coeffs(AVCodecContext *avctx, uint8_t *src, int16_t *dst, i
 
         flag = 0;
 
-        if ((uint64_t)state > 0xFF / 4 || i >= size)
+        if (state * 4ULL > 0xFF || i >= size)
             continue;
 
         pfx = ((state + 8) >> 5) + (state ? ff_clz(state): 32) - 24;
@@ -330,9 +330,6 @@ static int read_highpass(AVCodecContext *avctx, uint8_t *ptr, int plane, AVFrame
                    " for plane %d, band %d\n", magic, plane, i);
             return AVERROR_INVALIDDATA;
         }
-
-        if (a == INT32_MIN)
-            return AVERROR_INVALIDDATA;
 
         ret = read_high_coeffs(avctx, ptr + bytestream2_tell(&ctx->gb), dest, size,
                                c, (b >= FFABS(a)) ? b : a, d,

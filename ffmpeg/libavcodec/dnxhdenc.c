@@ -478,7 +478,6 @@ static av_cold int dnxhd_encode_init(AVCodecContext *avctx)
     if (ctx->cid_table->frame_size == DNXHD_VARIABLE) {
         ctx->frame_size = ff_dnxhd_get_hr_frame_size(ctx->cid,
                                                      avctx->width, avctx->height);
-        av_assert0(ctx->frame_size >= 0);
         ctx->coding_unit_size = ctx->frame_size;
     } else {
         ctx->frame_size = ctx->cid_table->frame_size;
@@ -526,11 +525,9 @@ FF_DISABLE_DEPRECATION_WARNINGS
 FF_ENABLE_DEPRECATION_WARNINGS
 #endif
 
-    if (avctx->active_thread_type == FF_THREAD_SLICE) {
-        if (avctx->thread_count > MAX_THREADS) {
-            av_log(avctx, AV_LOG_ERROR, "too many threads\n");
-            return AVERROR(EINVAL);
-        }
+    if (avctx->thread_count > MAX_THREADS) {
+        av_log(avctx, AV_LOG_ERROR, "too many threads\n");
+        return AVERROR(EINVAL);
     }
 
     if (avctx->qmax <= 1) {
@@ -539,11 +536,9 @@ FF_ENABLE_DEPRECATION_WARNINGS
     }
 
     ctx->thread[0] = ctx;
-    if (avctx->active_thread_type == FF_THREAD_SLICE) {
-        for (i = 1; i < avctx->thread_count; i++) {
-            ctx->thread[i] = av_malloc(sizeof(DNXHDEncContext));
-            memcpy(ctx->thread[i], ctx, sizeof(DNXHDEncContext));
-        }
+    for (i = 1; i < avctx->thread_count; i++) {
+        ctx->thread[i] = av_malloc(sizeof(DNXHDEncContext));
+        memcpy(ctx->thread[i], ctx, sizeof(DNXHDEncContext));
     }
 
     return 0;
@@ -749,14 +744,14 @@ void dnxhd_get_blocks(DNXHDEncContext *ctx, int mb_x, int mb_y)
         ptr_y = &ctx->edge_buf_y[0];
         ptr_u = &ctx->edge_buf_uv[0][0];
         ptr_v = &ctx->edge_buf_uv[1][0];
-    } else if (ctx->bit_depth == 10 && vdsp->emulated_edge_mc && ((mb_x << 4) + 16 > ctx->m.avctx->width ||
-                                                                  (mb_y << 4) + 16 > ctx->m.avctx->height)) {
-        int y_w = ctx->m.avctx->width  - (mb_x << 4);
-        int y_h = ctx->m.avctx->height - (mb_y << 4);
+    } else if (ctx->bit_depth == 10 && vdsp->emulated_edge_mc && ((mb_x << 3) + 8 > ctx->m.avctx->width ||
+                                                                  (mb_y << 3) + 8 > ctx->m.avctx->height)) {
+        int y_w = ctx->m.avctx->width  - (mb_x << 3);
+        int y_h = ctx->m.avctx->height - (mb_y << 3);
         int uv_w = ctx->is_444 ? y_w : (y_w + 1) / 2;
         int uv_h = y_h;
-        linesize = 32;
-        uvlinesize = 16 + 16 * ctx->is_444;
+        linesize = 16;
+        uvlinesize = 8 + 8 * ctx->is_444;
 
         vdsp->emulated_edge_mc(&ctx->edge_buf_y[0], ptr_y,
                                linesize, ctx->m.linesize,
@@ -771,8 +766,8 @@ void dnxhd_get_blocks(DNXHDEncContext *ctx, int mb_x, int mb_y)
                                uvlinesize / 2, 16,
                                0, 0, uv_w, uv_h);
 
-        dct_y_offset =  bw * linesize / 2;
-        dct_uv_offset = bw * uvlinesize / 2;
+        dct_y_offset =  bw * linesize;
+        dct_uv_offset = bw * uvlinesize;
         ptr_y = &ctx->edge_buf_y[0];
         ptr_u = &ctx->edge_buf_uv[0][0];
         ptr_v = &ctx->edge_buf_uv[1][0];
@@ -1395,7 +1390,7 @@ AVCodec ff_dnxhd_encoder = {
     .init           = dnxhd_encode_init,
     .encode2        = dnxhd_encode_picture,
     .close          = dnxhd_encode_end,
-    .capabilities   = AV_CODEC_CAP_SLICE_THREADS | AV_CODEC_CAP_FRAME_THREADS | AV_CODEC_CAP_INTRA_ONLY,
+    .capabilities   = AV_CODEC_CAP_SLICE_THREADS,
     .pix_fmts       = (const enum AVPixelFormat[]) {
         AV_PIX_FMT_YUV422P,
         AV_PIX_FMT_YUV422P10,

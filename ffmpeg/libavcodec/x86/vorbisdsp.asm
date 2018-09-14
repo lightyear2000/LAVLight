@@ -57,17 +57,13 @@ cglobal vorbis_inverse_coupling, 3, 3, 6, mag, ang, block_size
 %endif
 
 INIT_XMM sse
-cglobal vorbis_inverse_coupling, 3, 3, 6, mag, ang, block_size
+cglobal vorbis_inverse_coupling, 3, 4, 6, mag, ang, block_size, cntr
     mova                     m5, [pdw_80000000]
-    shl             block_sized, 2
-    add                    magq, block_sizeq
-    add                    angq, block_sizeq
-    neg             block_sizeq
-
+    xor                   cntrq, cntrq
 align 16
 .loop:
-    mova                     m0, [magq+block_sizeq]
-    mova                     m1, [angq+block_sizeq]
+    mova                     m0, [magq+cntrq*4]
+    mova                     m1, [angq+cntrq*4]
     xorps                    m2, m2
     xorps                    m3, m3
     cmpleps                  m2, m0     ; m <= 0.0
@@ -79,8 +75,9 @@ align 16
     andnps                   m4, m1
     addps                    m3, m0     ; a = m + ((a < 0) & (a ^ sign(m)))
     subps                    m0, m4     ; m = m + ((a > 0) & (a ^ sign(m)))
-    mova     [angq+block_sizeq], m3
-    mova     [magq+block_sizeq], m0
-    add             block_sizeq, mmsize
+    mova         [angq+cntrq*4], m3
+    mova         [magq+cntrq*4], m0
+    add                   cntrq, 4
+    cmp                   cntrq, block_sizeq
     jl .loop
     RET

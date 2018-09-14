@@ -282,16 +282,10 @@ static int mediacodec_wrap_sw_buffer(AVCodecContext *avctx,
      * on the last avpacket received which is not in sync with the frame:
      *   * N avpackets can be pushed before 1 frame is actually returned
      *   * 0-sized avpackets are pushed to flush remaining frames at EOS */
-    if (avctx->pkt_timebase.num && avctx->pkt_timebase.den) {
-        frame->pts = av_rescale_q(info->presentationTimeUs,
-                                      av_make_q(1, 1000000),
-                                      avctx->pkt_timebase);
-    } else {
-        frame->pts = info->presentationTimeUs;
-    }
+    frame->pts = info->presentationTimeUs;
 #if FF_API_PKT_PTS
 FF_DISABLE_DEPRECATION_WARNINGS
-    frame->pkt_pts = frame->pts;
+    frame->pkt_pts = info->presentationTimeUs;
 FF_ENABLE_DEPRECATION_WARNINGS
 #endif
     frame->pkt_dts = AV_NOPTS_VALUE;
@@ -484,7 +478,7 @@ int ff_mediacodec_dec_init(AVCodecContext *avctx, MediaCodecDecContext *s,
 
     profile = ff_AMediaCodecProfile_getProfileFromAVCodecContext(avctx);
     if (profile < 0) {
-        av_log(avctx, AV_LOG_WARNING, "Unsupported or unknown profile\n");
+        av_log(avctx, AV_LOG_WARNING, "Unsupported or unknown profile");
     }
 
     s->codec_name = ff_AMediaCodecList_getCodecNameByType(mime, profile, 0, avctx);
@@ -619,7 +613,7 @@ int ff_mediacodec_dec_decode(AVCodecContext *avctx, MediaCodecDecContext *s,
             memcpy(data, pkt->data + offset, size);
             offset += size;
 
-            if (avctx->pkt_timebase.num && avctx->pkt_timebase.den) {
+            if (s->surface && avctx->pkt_timebase.num && avctx->pkt_timebase.den) {
                 pts = av_rescale_q(pts, avctx->pkt_timebase, av_make_q(1, 1000000));
             }
 
@@ -769,13 +763,6 @@ AVHWAccel ff_hevc_mediacodec_hwaccel = {
     .name    = "mediacodec",
     .type    = AVMEDIA_TYPE_VIDEO,
     .id      = AV_CODEC_ID_HEVC,
-    .pix_fmt = AV_PIX_FMT_MEDIACODEC,
-};
-
-AVHWAccel ff_mpeg2_mediacodec_hwaccel = {
-    .name    = "mediacodec",
-    .type    = AVMEDIA_TYPE_VIDEO,
-    .id      = AV_CODEC_ID_MPEG2VIDEO,
     .pix_fmt = AV_PIX_FMT_MEDIACODEC,
 };
 

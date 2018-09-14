@@ -60,7 +60,7 @@ BEGIN
             VALUE "FileDescription", "LAV Light Splitter - DirectShow Media Splitter"
             VALUE "FileVersion", LAV_VERSION_STR
             VALUE "InternalName", "LAVSplitter.ax"
-            VALUE "LegalCopyright", "Copyright (C) 2017 Lightyear"
+            VALUE "LegalCopyright", "Copyright (C) 2018 Lightyear"
             VALUE "OriginalFilename", "LAVSplitter.ax"
             VALUE "ProductName", "LAV Light Splitter"
             VALUE "ProductVersion", LAV_VERSION_STR

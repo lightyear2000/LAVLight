@@ -110,7 +110,7 @@ static struct {LPCSTR name, iso6392, iso6391, iso6392_2; LCID lcid;} s_isolangs[
   {"Chewa; Chichewa; Nyanja", "nya", "ny"},
   {"Cheyenne", "chy", nullptr},
   {"Chibcha", "chb", nullptr},
-  {"Chinese", "chi", "zh", "zho", MAKELCID( MAKELANGID(LANG_CHINESE, SUBLANG_NEUTRAL), SORT_DEFAULT)},
+  {"Chinese", "chi", "zh", "zho", MAKELCID( MAKELANGID(LANG_CHINESE, SUBLANG_DEFAULT), SORT_DEFAULT)},
   {"Chinook jargon", "chn", nullptr},
   {"Chipewyan", "chp", nullptr},
   {"Choctaw", "cho", nullptr},
@@ -614,9 +614,9 @@ std::string ProbeForISO6392(LPCSTR lang)
   } else if (strlen(lang) > 3) {
     isoLang = LanguageToISO6392(lang);
     if (isoLang.empty()) {
-      std::regex ogmRegex("\\[([[:alpha:]]{3})\\]");
-      std::cmatch res;
-      bool found = std::regex_search(lang, res, ogmRegex);
+      std::tr1::regex ogmRegex("\\[([[:alpha:]]{3})\\]");
+      std::tr1::cmatch res;
+      bool found = std::tr1::regex_search(lang, res, ogmRegex);
       if (found && !res[1].str().empty()) {
         isoLang = ISO6392Check(res[1].str().c_str());
       }

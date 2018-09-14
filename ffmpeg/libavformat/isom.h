@@ -52,7 +52,7 @@ struct AVAESCTR;
  */
 
 typedef struct MOVStts {
-    unsigned int count;
+    int count;
     int duration;
 } MOVStts;
 
@@ -137,11 +137,10 @@ typedef struct MOVStreamContext {
     unsigned int stts_count;
     MOVStts *stts_data;
     unsigned int ctts_count;
-    unsigned int ctts_allocated_size;
     MOVStts *ctts_data;
     unsigned int stsc_count;
     MOVStsc *stsc_data;
-    unsigned int stsc_index;
+    int stsc_index;
     int stsc_sample;
     unsigned int stps_count;
     unsigned *stps_data;  ///< partial sync sample for mpeg-2 open gop

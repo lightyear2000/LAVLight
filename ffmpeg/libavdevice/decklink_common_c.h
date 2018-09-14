@@ -1,7 +1,6 @@
 /*
  * Blackmagic DeckLink common code
  * Copyright (c) 2013-2014 Ramiro Polla
- * Copyright (c) 2017 Akamai Technologies, Inc.
  *
  * This file is part of FFmpeg.
  *
@@ -49,8 +48,6 @@ struct decklink_cctx {
     int video_input;
     int draw_bars;
     char *format_code;
-    int raw_format;
-    int64_t queue_size;
 };
 
 #endif /* AVDEVICE_DECKLINK_COMMON_C_H */

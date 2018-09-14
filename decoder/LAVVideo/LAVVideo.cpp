@@ -184,9 +184,6 @@ HRESULT CLAVVideo::LoadDefaults()
   m_settings.HWAccelDeviceDXVA2 = LAVHWACCEL_DEVICE_DEFAULT;
   m_settings.HWAccelDeviceDXVA2Desc = 0;
 
-  m_settings.HWAccelDeviceD3D11 = LAVHWACCEL_DEVICE_DEFAULT;
-  m_settings.HWAccelDeviceD3D11Desc = 0;
-
   m_settings.bH264MVCOverride = TRUE;
 
   return S_OK;
@@ -319,12 +316,6 @@ HRESULT CLAVVideo::ReadSettings(HKEY rootKey)
     dwVal = regHW.ReadDWORD(L"HWAccelDeviceDXVA2Desc", hr);
     if (SUCCEEDED(hr)) m_settings.HWAccelDeviceDXVA2Desc = dwVal;
 
-    dwVal = regHW.ReadDWORD(L"HWAccelDeviceD3D11", hr);
-    if (SUCCEEDED(hr)) m_settings.HWAccelDeviceD3D11 = dwVal;
-
-    dwVal = regHW.ReadDWORD(L"HWAccelDeviceD3D11Desc", hr);
-    if (SUCCEEDED(hr)) m_settings.HWAccelDeviceD3D11Desc = dwVal;
-
     bFlag = regHW.ReadBOOL(L"HWAccelCUVIDXVA", hr);
     if (SUCCEEDED(hr)) m_settings.HWAccelCUVIDXVA = bFlag;
   }
@@ -383,9 +374,6 @@ HRESULT CLAVVideo::SaveSettings()
 
     regHW.WriteDWORD(L"HWAccelDeviceDXVA2", m_settings.HWAccelDeviceDXVA2);
     regHW.WriteDWORD(L"HWAccelDeviceDXVA2Desc", m_settings.HWAccelDeviceDXVA2Desc);
-
-    regHW.WriteDWORD(L"HWAccelDeviceD3D11", m_settings.HWAccelDeviceD3D11);
-    regHW.WriteDWORD(L"HWAccelDeviceD3D11Desc", m_settings.HWAccelDeviceD3D11Desc);
 
     regHW.WriteBOOL(L"HWAccelCUVIDXVA", m_settings.HWAccelCUVIDXVA);
 
@@ -528,16 +516,13 @@ HRESULT CLAVVideo::DecideBufferSize(IMemAllocator* pAllocator, ALLOCATOR_PROPERT
   CMediaType &mtOut = m_pOutput->CurrentMediaType();
   videoFormatTypeHandler(mtOut, &pBIH);
 
-  // try to honor the requested number of downstream buffers, but cap at the decoders maximum
-  long decoderBuffersMax = LONG_MAX;
-  long decoderBuffs = m_Decoder.GetBufferCount(&decoderBuffersMax);
   long downstreamBuffers = pProperties->cBuffers;
-  pProperties->cBuffers = min(max(pProperties->cBuffers, 2) + decoderBuffs, decoderBuffersMax);
+  pProperties->cBuffers = max(pProperties->cBuffers, 2) + m_Decoder.GetBufferCount();
   pProperties->cbBuffer = pBIH ? pBIH->biSizeImage : 3110400;
   pProperties->cbAlign  = 1;
   pProperties->cbPrefix = 0;
 
-  DbgLog((LOG_TRACE, 10, L" -> Downstream wants %d buffers, decoder wants %d, for a total of: %d", downstreamBuffers, decoderBuffs, pProperties->cBuffers));
+  DbgLog((LOG_TRACE, 10, L" -> Downstream wants %d buffers, decoder wants %d, for a total of: %d", downstreamBuffers, m_Decoder.GetBufferCount(), pProperties->cBuffers));
 
   HRESULT hr;
   ALLOCATOR_PROPERTIES Actual;
@@ -835,10 +820,6 @@ HRESULT CLAVVideo::ReleaseLastSequenceFrame()
     SafeRelease(&pSample);
     SafeRelease(&pSurface);
   }
-  else if (m_pLastSequenceFrame && m_pLastSequenceFrame->format == LAVPixFmt_D3D11)
-  {
-    // TODO D3D11
-  }
   ReleaseFrame(&m_pLastSequenceFrame);
 
   return S_OK;
@@ -904,14 +885,10 @@ HRESULT CLAVVideo::BreakConnect(PIN_DIRECTION dir)
 {
   DbgLog((LOG_TRACE, 10, L"::BreakConnect"));
   if (dir == PINDIR_INPUT) {
+    m_Decoder.Close();
+
     if (m_pFilterGraph)
       avfilter_graph_free(&m_pFilterGraph);
-
-    m_Decoder.Close();
-  }
-  else if (dir == PINDIR_OUTPUT)
-  {
-    m_Decoder.BreakConnect();
   }
   return __super::BreakConnect(dir);
 }
@@ -1016,22 +993,6 @@ HRESULT CLAVVideo::StartStreaming()
   }
 
   return S_OK;
-}
-
-STDMETHODIMP CLAVVideo::Stop()
-{
-  // Get the receiver lock and prevent frame delivery
-  {
-    CAutoLock lck3(&m_csReceive);
-    m_bFlushing = TRUE;
-  }
-
-  // actually perform the stop
-  HRESULT hr = __super::Stop();
-
-  // unblock delivery again, if we continue receiving frames
-  m_bFlushing = FALSE;
-  return hr;
 }
 
 HRESULT CLAVVideo::GetDeliveryBuffer(IMediaSample** ppOut, int width, int height, AVRational ar, DXVA2_ExtendedFormat dxvaExtFlags, REFERENCE_TIME avgFrameDuration)
@@ -1155,13 +1116,11 @@ HRESULT CLAVVideo::ReconnectOutput(int width, int height, AVRational ar, DXVA2_E
   // Remove custom matrix settings, which are not understood upstream
   if (dxvaExtFlags.VideoTransferMatrix == 6) {
     dxvaExtFlags.VideoTransferMatrix = DXVA2_VideoTransferMatrix_BT601;
-  } else if (dxvaExtFlags.VideoTransferMatrix > 5 && !m_bMadVR) {
+  } else if (dxvaExtFlags.VideoTransferMatrix > 4 && !m_bMadVR) {
     dxvaExtFlags.VideoTransferMatrix = DXVA2_VideoTransferMatrix_Unknown;
   }
-
-  // madVR uses a different value for SMPTE ST 2084
-  if (dxvaExtFlags.VideoTransferFunction == 15 && m_bMadVR) {
-    dxvaExtFlags.VideoTransferFunction = 16;
+  if (dxvaExtFlags.VideoTransferFunction > MFVideoTransFunc_Log_316 && !m_bMadVR) {
+    dxvaExtFlags.VideoTransferFunction = DXVA2_VideoTransFunc_Unknown;
   }
 
   if (mt.formattype  == FORMAT_VideoInfo) {
@@ -1478,7 +1437,6 @@ STDMETHODIMP CLAVVideo::AllocateFrame(LAVFrame **ppFrame)
   (*ppFrame)->bpp = 8;
   (*ppFrame)->rtStart = AV_NOPTS_VALUE;
   (*ppFrame)->rtStop  = AV_NOPTS_VALUE;
-  (*ppFrame)->aspect_ratio = { 0, 1 };
 
   (*ppFrame)->frame_type = '?';
 
@@ -1513,10 +1471,6 @@ HRESULT CLAVVideo::DeDirectFrame(LAVFrame *pFrame, bool bDisableDirectMode)
   pFrame->direct_lock   = nullptr;
   pFrame->direct_unlock = nullptr;
   memset(pFrame->data, 0, sizeof(pFrame->data));
-
-  // sidedata remains on the main frame
-  tmpFrame.side_data = nullptr;
-  tmpFrame.side_data_count = 0;
 
   LAVDirectBuffer buffer;
   if (tmpFrame.direct_lock(&tmpFrame, &buffer)) {
@@ -1620,7 +1574,7 @@ STDMETHODIMP CLAVVideo::Deliver(LAVFrame *pFrame)
 
   // Only perform filtering if we have to.
   // DXVA Native generally can't be filtered, and the only filtering we currently support is software deinterlacing
-  if ( pFrame->format == LAVPixFmt_DXVA2 || pFrame->format == LAVPixFmt_D3D11
+  if ( pFrame->format == LAVPixFmt_DXVA2
     || !(m_Decoder.IsInterlaced(FALSE) && m_settings.SWDeintMode != SWDeintMode_None)
     || pFrame->flags & LAV_FRAME_FLAG_REDRAW) {
     return DeliverToRenderer(pFrame);
@@ -1642,7 +1596,7 @@ HRESULT CLAVVideo::DeliverToRenderer(LAVFrame *pFrame)
 
   if (!(pFrame->flags & LAV_FRAME_FLAG_REDRAW)) {
     // Release the old End-of-Sequence frame, this ensures any "normal" frame will clear the stored EOS frame
-    if (pFrame->format != LAVPixFmt_DXVA2 && pFrame->format != LAVPixFmt_D3D11) {
+    if (pFrame->format != LAVPixFmt_DXVA2) {
       ReleaseFrame(&m_pLastSequenceFrame);
       if ((pFrame->flags & LAV_FRAME_FLAG_END_OF_SEQUENCE || m_bInDVDMenu)) {
         if (pFrame->direct) {
@@ -1654,7 +1608,7 @@ HRESULT CLAVVideo::DeliverToRenderer(LAVFrame *pFrame)
         }
         CopyLAVFrame(pFrame, &m_pLastSequenceFrame);
       }
-    } else if (pFrame->format == LAVPixFmt_DXVA2) {
+    } else {
       if ((pFrame->flags & LAV_FRAME_FLAG_END_OF_SEQUENCE || m_bInDVDMenu)) {
         if (!m_pLastSequenceFrame) {
           hr = AllocateFrame(&m_pLastSequenceFrame);
@@ -1677,10 +1631,6 @@ HRESULT CLAVVideo::DeliverToRenderer(LAVFrame *pFrame)
           m_pLastSequenceFrame->destruct = nullptr;
           m_pLastSequenceFrame->priv_data = nullptr;
 
-          // don't copy side data
-          m_pLastSequenceFrame->side_data = nullptr;
-          m_pLastSequenceFrame->side_data_count = 0;
-
           IDirect3DSurface9 *pSurface = (IDirect3DSurface9 *)m_pLastSequenceFrame->data[3];
 
           IDirect3DDevice9 *pDevice = nullptr;
@@ -1694,10 +1644,6 @@ HRESULT CLAVVideo::DeliverToRenderer(LAVFrame *pFrame)
           }
         }
       }
-    }
-    else if (pFrame->format == LAVPixFmt_D3D11)
-    {
-      // TODO D3D11
     }
   }
 
@@ -1805,7 +1751,7 @@ HRESULT CLAVVideo::DeliverToRenderer(LAVFrame *pFrame)
   if (avgDuration == 0)
     avgDuration = AV_NOPTS_VALUE;
 
-  if (pFrame->format == LAVPixFmt_DXVA2 || pFrame->format == LAVPixFmt_D3D11) {
+  if (pFrame->format == LAVPixFmt_DXVA2) {
     pSampleOut = (IMediaSample *)pFrame->data[0];
     // Addref the sample if we need to. If its coming from the decoder, it should be addref'ed,
     // but if its a copy from the subtitle engine, then it should not be addref'ed.
@@ -1814,8 +1760,7 @@ HRESULT CLAVVideo::DeliverToRenderer(LAVFrame *pFrame)
 
     ReconnectOutput(width, height, pFrame->aspect_ratio, pFrame->ext_format, avgDuration, TRUE);
   } else {
-    if(FAILED(hr = GetDeliveryBuffer(&pSampleOut, width, height, pFrame->aspect_ratio, pFrame->ext_format, avgDuration)) || FAILED(hr = pSampleOut->GetPointer(&pDataOut)) || pDataOut == nullptr) {
-      SafeRelease(&pSampleOut);
+    if(FAILED(hr = GetDeliveryBuffer(&pSampleOut, width, height, pFrame->aspect_ratio, pFrame->ext_format, avgDuration)) || FAILED(hr = pSampleOut->GetPointer(&pDataOut))) {
       ReleaseFrame(&pFrame);
       return hr;
     }
@@ -1825,18 +1770,7 @@ HRESULT CLAVVideo::DeliverToRenderer(LAVFrame *pFrame)
   BITMAPINFOHEADER *pBIH = nullptr;
   videoFormatTypeHandler(mt.Format(), mt.FormatType(), &pBIH);
 
-  // Set side data on the media sample
-  if (pFrame->side_data_count) {
-    IMediaSideData *pMediaSideData = nullptr;
-    if (SUCCEEDED(hr = pSampleOut->QueryInterface(&pMediaSideData))) {
-      for (int i = 0; i < pFrame->side_data_count; i++)
-        pMediaSideData->SetSideData(pFrame->side_data[i].guidType, pFrame->side_data[i].data, pFrame->side_data[i].size);
-
-      SafeRelease(&pMediaSideData);
-    }
-  }
-
-  if (pFrame->format != LAVPixFmt_DXVA2 && pFrame->format != LAVPixFmt_D3D11) {
+  if (pFrame->format != LAVPixFmt_DXVA2) {
     long required = m_PixFmtConverter.GetImageSize(pBIH->biWidth, abs(pBIH->biHeight));
 
     long lSampleSize = pSampleOut->GetSize();
@@ -1870,6 +1804,17 @@ HRESULT CLAVVideo::DeliverToRenderer(LAVFrame *pFrame)
 
     DbgLog((LOG_TRACE, 10, L"Pixel Mapping took %2.3fms in avg", m_pixFmtTimingAvg.Average()));
   #endif
+
+    // Set side data on the media sample
+    if (pFrame->side_data_count) {
+      IMediaSideData *pMediaSideData = nullptr;
+      if (SUCCEEDED(hr = pSampleOut->QueryInterface(&pMediaSideData))) {
+        for (int i = 0; i < pFrame->side_data_count; i++)
+          pMediaSideData->SetSideData(pFrame->side_data[i].guidType, pFrame->side_data[i].data, pFrame->side_data[i].size);
+
+        SafeRelease(&pMediaSideData);
+      }
+    }
 
     // Write the second view into IMediaSample3D, if available
     if (pFrame->flags & LAV_FRAME_FLAG_MVC) {
@@ -1921,7 +1866,7 @@ HRESULT CLAVVideo::DeliverToRenderer(LAVFrame *pFrame)
     pSampleOut->SetMediaType(sendmt);
     DeleteMediaType(sendmt);
     m_bSendMediaType = FALSE;
-    if (pFrame->format == LAVPixFmt_DXVA2 || pFrame->format == LAVPixFmt_D3D11)
+    if (pFrame->format == LAVPixFmt_DXVA2)
       bSizeChanged = TRUE;
   }
 
@@ -2038,8 +1983,6 @@ HRESULT CLAVVideo::RedrawStillImage()
         SafeRelease(&pSample);
       }
       return hr;
-    } else if (m_pLastSequenceFrame->format == LAVPixFmt_D3D11) {
-      // TODO D3D11
     } else {
       LAVFrame *pFrame = nullptr;
       HRESULT hr = CopyLAVFrame(m_pLastSequenceFrame, &pFrame);
@@ -2462,24 +2405,7 @@ STDMETHODIMP_(DWORD) CLAVVideo::GetHWAccelDeviceIndex(LAVHWAccel hwAccel, DWORD 
       *pdwDeviceIdentifier = dwDeviceId;
 
     return dwDeviceIndex;
-  } else if (hwAccel == HWAccel_D3D11) {
-      DWORD dwDeviceIndex = m_settings.HWAccelDeviceD3D11;
-      DWORD dwDeviceId = m_settings.HWAccelDeviceD3D11Desc;
-
-      // verify the values and re-match them to adapters appropriately
-      if (dwDeviceIndex != LAVHWACCEL_DEVICE_DEFAULT && dwDeviceId != 0) {
-        hr = VerifyD3D11Device(dwDeviceIndex, dwDeviceId);
-        if (FAILED(hr)) {
-          dwDeviceIndex = LAVHWACCEL_DEVICE_DEFAULT;
-          dwDeviceId = 0;
-        }
-      }
-
-      if (pdwDeviceIdentifier)
-        *pdwDeviceIdentifier = dwDeviceId;
-
-      return dwDeviceIndex;
-    }
+  }
 
   if (pdwDeviceIdentifier)
     *pdwDeviceIdentifier = 0;
@@ -2497,10 +2423,6 @@ STDMETHODIMP CLAVVideo::SetHWAccelDeviceIndex(LAVHWAccel hwAccel, DWORD dwIndex,
     if (hwAccel == HWAccel_DXVA2CopyBack) {
       m_settings.HWAccelDeviceDXVA2 = dwIndex;
       m_settings.HWAccelDeviceDXVA2Desc = dwDeviceIdentifier;
-    }
-    else if (hwAccel == HWAccel_D3D11) {
-      m_settings.HWAccelDeviceD3D11 = dwIndex;
-      m_settings.HWAccelDeviceD3D11Desc = dwDeviceIdentifier;
     }
     return SaveSettings();
   }

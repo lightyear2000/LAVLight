@@ -214,13 +214,11 @@ HRESULT CLAVVideoSettingsProp::OnActivate()
   WCHAR hwAccelQuickSync[] = L"Intel\xae QuickSync";
   WCHAR hwAccelDXVA2CB[] = L"DXVA2 (copy-back)";
   WCHAR hwAccelDXVA2N[] = L"DXVA2 (native)";
-  WCHAR hwAccelD3D11[] = L"D3D11";
   SendDlgItemMessage(m_Dlg, IDC_HWACCEL, CB_ADDSTRING, 0, (LPARAM)hwAccelNone);
   SendDlgItemMessage(m_Dlg, IDC_HWACCEL, CB_ADDSTRING, 0, (LPARAM)hwAccelCUDA);
   SendDlgItemMessage(m_Dlg, IDC_HWACCEL, CB_ADDSTRING, 0, (LPARAM)hwAccelQuickSync);
   SendDlgItemMessage(m_Dlg, IDC_HWACCEL, CB_ADDSTRING, 0, (LPARAM)hwAccelDXVA2CB);
   SendDlgItemMessage(m_Dlg, IDC_HWACCEL, CB_ADDSTRING, 0, (LPARAM)hwAccelDXVA2N);
-  SendDlgItemMessage(m_Dlg, IDC_HWACCEL, CB_ADDSTRING, 0, (LPARAM)hwAccelD3D11);
 
   // Init the fieldorder Combo Box
   SendDlgItemMessage(m_Dlg, IDC_DEINT_FIELDORDER, CB_RESETCONTENT, 0, 0);
@@ -385,14 +383,15 @@ HRESULT CLAVVideoSettingsProp::UpdateHWOptions()
 
   SendDlgItemMessage(m_Dlg, IDC_HWACCEL_AVAIL, WM_SETTEXT, 0, (LPARAM)(hwAccel == HWAccel_None ? hwAccelEmpty : dwSupport == 0 ? hwAccelUnavailable : hwAccelAvailable));
 
+  EnableWindow(GetDlgItem(m_Dlg, IDC_LBL_HWACCEL_DEVICE_SELECT), hwAccel == HWAccel_DXVA2CopyBack);
+  EnableWindow(GetDlgItem(m_Dlg, IDC_HWACCEL_DEVICE_SELECT), hwAccel == HWAccel_DXVA2CopyBack);
+
   const WCHAR hwHintNoDeviceChoice[] = L"The selected Hardware Decoder does not support using a specific device.";
   const WCHAR hwHintDXVA2Display[] = L"DXVA2 requires an active display for GPUs to be available.\nNote that GPUs are listed once for each connected display.";
-  const WCHAR hwHintD3D11NotSupported[] = L"D3D11 requires Windows 8 or newer, and is not supported on this OS.";
-  const WCHAR hwHintD3D11DeviceHint[] = L"Selecting a specific device for D3D11 disables Native mode and forces Copy-Back, use Automatic for the best performance.";
 
 
   SendDlgItemMessage(m_Dlg, IDC_HWACCEL_DEVICE_SELECT, CB_RESETCONTENT, 0, 0);
-  SendDlgItemMessage(m_Dlg, IDC_HWACCEL_DEVICE_SELECT, CB_ADDSTRING, 0, (hwAccel == HWAccel_D3D11) ? (LPARAM)L"Automatic (Native)" : (LPARAM)L"Automatic");
+  SendDlgItemMessage(m_Dlg, IDC_HWACCEL_DEVICE_SELECT, CB_ADDSTRING, 0, (LPARAM)L"Automatic");
 
   DWORD dwnDevices = m_pVideoSettings->GetHWAccelNumDevices(hwAccel);
   for (DWORD dwDevice = 0; dwDevice < dwnDevices; dwDevice++)
@@ -405,13 +404,7 @@ HRESULT CLAVVideoSettingsProp::UpdateHWOptions()
     }
   }
 
-  if (hwAccel == HWAccel_D3D11 && !IsWindows8OrNewer())
-  {
-    m_HWDeviceIndex = 0;
-    dwnDevices = 0;
-    SendDlgItemMessage(m_Dlg, IDC_LBL_HWACCEL_DEVICE_HINT, WM_SETTEXT, 0, (LPARAM)hwHintD3D11NotSupported);
-  }
-  else if (dwnDevices == 0) {
+  if (dwnDevices == 0) {
     m_HWDeviceIndex = 0;
     SendDlgItemMessage(m_Dlg, IDC_LBL_HWACCEL_DEVICE_HINT, WM_SETTEXT, 0, (LPARAM)hwHintNoDeviceChoice);
   }
@@ -422,17 +415,8 @@ HRESULT CLAVVideoSettingsProp::UpdateHWOptions()
       m_HWDeviceIndex = 0;
     else
       m_HWDeviceIndex++;
-
-    if (hwAccel == HWAccel_DXVA2CopyBack)
-      SendDlgItemMessage(m_Dlg, IDC_LBL_HWACCEL_DEVICE_HINT, WM_SETTEXT, 0, (LPARAM)hwHintDXVA2Display);
-    else if (hwAccel == HWAccel_D3D11)
-      SendDlgItemMessage(m_Dlg, IDC_LBL_HWACCEL_DEVICE_HINT, WM_SETTEXT, 0, (LPARAM)hwHintD3D11DeviceHint);
-    else
-      SendDlgItemMessage(m_Dlg, IDC_LBL_HWACCEL_DEVICE_HINT, WM_SETTEXT, 0, (LPARAM)L"");
+    SendDlgItemMessage(m_Dlg, IDC_LBL_HWACCEL_DEVICE_HINT, WM_SETTEXT, 0, (LPARAM)(hwAccel == HWAccel_DXVA2CopyBack ? hwHintDXVA2Display : L""));
   }
-
-  EnableWindow(GetDlgItem(m_Dlg, IDC_LBL_HWACCEL_DEVICE_SELECT), (dwnDevices > 0));
-  EnableWindow(GetDlgItem(m_Dlg, IDC_HWACCEL_DEVICE_SELECT), (dwnDevices > 0));
 
   SendDlgItemMessage(m_Dlg, IDC_HWACCEL_DEVICE_SELECT, CB_SETCURSEL, m_HWDeviceIndex, 0);
 

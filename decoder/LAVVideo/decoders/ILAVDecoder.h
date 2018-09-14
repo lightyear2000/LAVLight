@@ -56,7 +56,6 @@ typedef enum LAVPixelFormat {
   LAVPixFmt_RGB48,       ///< RGB48, in RGB order (16-bit per pixel)
 
   LAVPixFmt_DXVA2,       ///< DXVA2 Surface
-  LAVPixFmt_D3D11,       ///< D3D11 Surface
 
   LAVPixFmt_NB,          ///< number of formats
 } LAVPixelFormat;
@@ -388,14 +387,9 @@ interface ILAVDecoder
   STDMETHOD(PostConnect)(IPin *pPin) PURE;
 
   /**
-   * Notify the decoder the output connection was broken
-   */
-  STDMETHOD(BreakConnect)() PURE;
-
-  /**
    * Get the number of sample buffers optimal for this decoder
    */
-  STDMETHOD_(long, GetBufferCount)(long *pMaxBuffers = nullptr) PURE;
+  STDMETHOD_(long, GetBufferCount)() PURE;
 
   /**
    * Get the name of the decoder
@@ -434,13 +428,12 @@ interface ILAVDecoder
  * They are listed here so that including their header files is not required
  */
 ILAVDecoder *CreateDecoderAVCodec();
+ILAVDecoder *CreateDecoderWMV9();
 ILAVDecoder *CreateDecoderWMV9MFT();
 ILAVDecoder *CreateDecoderCUVID();
 ILAVDecoder *CreateDecoderQuickSync();
 ILAVDecoder *CreateDecoderDXVA2();
 ILAVDecoder *CreateDecoderDXVA2Native();
-ILAVDecoder *CreateDecoderD3D11();
 ILAVDecoder *CreateDecoderMSDKMVC();
 
 HRESULT VerifyD3D9Device(DWORD & dwIndex, DWORD dwDeviceId);
-HRESULT VerifyD3D11Device(DWORD & dwIndex, DWORD dwDeviceId);

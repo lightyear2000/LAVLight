@@ -20,6 +20,7 @@
 /eval
 /fifo
 /file
+/float_dsp
 /hash
 /hmac
 /imgutils
@@ -34,7 +35,6 @@
 /pca
 /pixdesc
 /pixelutils
-/pixfmt_best
 /random_seed
 /rational
 /ripemd

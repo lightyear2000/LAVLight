@@ -269,7 +269,6 @@ static int config_video_output(AVFilterLink *outlink)
     }
     outlink->w = ebur128->w;
     outlink->h = ebur128->h;
-    outlink->sample_aspect_ratio = (AVRational){1,1};
 
 #define PAD 8
 
@@ -300,7 +299,7 @@ static int config_video_output(AVFilterLink *outlink)
         ff_get_video_buffer(outlink, outlink->w, outlink->h);
     if (!outpicref)
         return AVERROR(ENOMEM);
-    outpicref->sample_aspect_ratio = (AVRational){1,1};
+    outlink->sample_aspect_ratio = (AVRational){1,1};
 
     /* init y references values (to draw LU lines) */
     ebur128->y_line_ref = av_calloc(ebur128->graph.h + 1, sizeof(*ebur128->y_line_ref));

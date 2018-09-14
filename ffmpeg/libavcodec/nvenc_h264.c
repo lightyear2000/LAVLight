@@ -119,13 +119,6 @@ static const AVOption options[] = {
                                                             OFFSET(cqp),          AV_OPT_TYPE_INT,   { .i64 = -1 }, -1, 51, VE },
     { "weighted_pred","Set 1 to enable weighted prediction",
                                                             OFFSET(weighted_pred),AV_OPT_TYPE_INT,   { .i64 = 0 }, 0, 1, VE },
-    { "coder",        "Coder type",                         OFFSET(coder),        AV_OPT_TYPE_INT,   { .i64 = -1                                         },-1, 2, VE, "coder" },
-    { "default",      "",                                   0,                    AV_OPT_TYPE_CONST, { .i64 = -1                                         }, 0, 0, VE, "coder" },
-    { "auto",         "",                                   0,                    AV_OPT_TYPE_CONST, { .i64 = NV_ENC_H264_ENTROPY_CODING_MODE_AUTOSELECT }, 0, 0, VE, "coder" },
-    { "cabac",        "",                                   0,                    AV_OPT_TYPE_CONST, { .i64 = NV_ENC_H264_ENTROPY_CODING_MODE_CABAC      }, 0, 0, VE, "coder" },
-    { "cavlc",        "",                                   0,                    AV_OPT_TYPE_CONST, { .i64 = NV_ENC_H264_ENTROPY_CODING_MODE_CAVLC      }, 0, 0, VE, "coder" },
-    { "ac",           "",                                   0,                    AV_OPT_TYPE_CONST, { .i64 = NV_ENC_H264_ENTROPY_CODING_MODE_CABAC      }, 0, 0, VE, "coder" },
-    { "vlc",          "",                                   0,                    AV_OPT_TYPE_CONST, { .i64 = NV_ENC_H264_ENTROPY_CODING_MODE_CAVLC      }, 0, 0, VE, "coder" },
     { NULL }
 };
 
@@ -138,7 +131,6 @@ static const AVCodecDefault defaults[] = {
     { "qcomp", "-1" },
     { "g", "250" },
     { "bf", "0" },
-    { "refs", "0" },
     { NULL },
 };
 
@@ -164,8 +156,6 @@ AVCodec ff_nvenc_encoder = {
     .type           = AVMEDIA_TYPE_VIDEO,
     .id             = AV_CODEC_ID_H264,
     .init           = nvenc_old_init,
-    .send_frame     = ff_nvenc_send_frame,
-    .receive_packet = ff_nvenc_receive_packet,
     .encode2        = ff_nvenc_encode_frame,
     .close          = ff_nvenc_encode_close,
     .priv_data_size = sizeof(NvencContext),
@@ -192,8 +182,6 @@ AVCodec ff_nvenc_h264_encoder = {
     .type           = AVMEDIA_TYPE_VIDEO,
     .id             = AV_CODEC_ID_H264,
     .init           = nvenc_old_init,
-    .send_frame     = ff_nvenc_send_frame,
-    .receive_packet = ff_nvenc_receive_packet,
     .encode2        = ff_nvenc_encode_frame,
     .close          = ff_nvenc_encode_close,
     .priv_data_size = sizeof(NvencContext),
@@ -220,8 +208,6 @@ AVCodec ff_h264_nvenc_encoder = {
     .type           = AVMEDIA_TYPE_VIDEO,
     .id             = AV_CODEC_ID_H264,
     .init           = ff_nvenc_encode_init,
-    .send_frame     = ff_nvenc_send_frame,
-    .receive_packet = ff_nvenc_receive_packet,
     .encode2        = ff_nvenc_encode_frame,
     .close          = ff_nvenc_encode_close,
     .priv_data_size = sizeof(NvencContext),

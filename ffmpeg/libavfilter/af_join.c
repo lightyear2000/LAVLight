@@ -232,10 +232,7 @@ static av_cold int join_init(AVFilterContext *ctx)
 
         pad.needs_fifo = 1;
 
-        if ((ret = ff_insert_inpad(ctx, i, &pad)) < 0) {
-            av_freep(&pad.name);
-            return ret;
-        }
+        ff_insert_inpad(ctx, i, &pad);
     }
 
     return 0;

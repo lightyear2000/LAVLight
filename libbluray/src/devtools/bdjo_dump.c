@@ -17,8 +17,8 @@
  * <http://www.gnu.org/licenses/>.
  */
 
-#include "bdj/bdjo_data.h"
-#include "bluray.h"
+#include "libbluray/bluray.h"
+#include "libbluray/bdj/bdjo_data.h"
 
 #include <stdio.h>
 #include <string.h>

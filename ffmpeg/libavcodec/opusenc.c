@@ -19,9 +19,8 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#include "opusenc.h"
+#include "opus_celt.h"
 #include "opus_pvq.h"
-#include "opusenc_psy.h"
 #include "opustab.h"
 
 #include "libavutil/float_dsp.h"
@@ -30,10 +29,28 @@
 #include "bytestream.h"
 #include "audio_frame_queue.h"
 
+/* Determines the maximum delay the psychoacoustic system will use for lookahead */
+#define FF_BUFQUEUE_SIZE 145
+#include "libavfilter/bufferqueue.h"
+
+#define OPUS_MAX_LOOKAHEAD ((FF_BUFQUEUE_SIZE - 1)*2.5f)
+
+#define OPUS_MAX_CHANNELS 2
+
+/* 120 ms / 2.5 ms = 48 frames (extremely improbable, but the encoder'll work) */
+#define OPUS_MAX_FRAMES_PER_PACKET 48
+
+#define OPUS_BLOCK_SIZE(x) (2 * 15 * (1 << ((x) + 2)))
+
+#define OPUS_SAMPLES_TO_BLOCK_SIZE(x) (ff_log2((x) / (2 * 15)) - 2)
+
+typedef struct OpusEncOptions {
+    float max_delay_ms;
+} OpusEncOptions;
+
 typedef struct OpusEncContext {
     AVClass *av_class;
     OpusEncOptions options;
-    OpusPsyContext psyctx;
     AVCodecContext *avctx;
     AudioFrameQueue afq;
     AVFloatDSPContext *dsp;
@@ -41,10 +58,10 @@ typedef struct OpusEncContext {
     CeltPVQ *pvq;
     struct FFBufQueue bufqueue;
 
-    uint8_t enc_id[64];
-    int enc_id_bits;
-
-    OpusPacketInfo packet;
+    enum OpusMode mode;
+    enum OpusBandwidth bandwidth;
+    int pkt_framesize;
+    int pkt_frames;
 
     int channels;
 
@@ -83,18 +100,18 @@ static int opus_gen_toc(OpusEncContext *s, uint8_t *toc, int *size, int *fsize_n
         { {  3,  7, 11,  0,  0 }, {  0,  0,  0,  0,  0 }, {  0,  0,  0,  0,  0 } }, /*  40 ms */
         { {  4,  8, 12,  0,  0 }, {  0,  0,  0,  0,  0 }, {  0,  0,  0,  0,  0 } }, /*  60 ms */
     };
-    int cfg = toc_cfg[s->packet.framesize][s->packet.mode][s->packet.bandwidth];
+    int cfg = toc_cfg[s->pkt_framesize][s->mode][s->bandwidth];
     *fsize_needed = 0;
     if (!cfg)
         return 1;
-    if (s->packet.frames == 2) {                                       /* 2 packets */
+    if (s->pkt_frames == 2) {                                          /* 2 packets */
         if (s->frame[0].framebits == s->frame[1].framebits) {          /* same size */
             tmp = 0x1;
         } else {                                                  /* different size */
             tmp = 0x2;
             *fsize_needed = 1;                     /* put frame sizes in the packet */
         }
-    } else if (s->packet.frames > 2) {
+    } else if (s->pkt_frames > 2) {
         tmp = 0x3;
         extended_toc = 1;
     }
@@ -102,11 +119,10 @@ static int opus_gen_toc(OpusEncContext *s, uint8_t *toc, int *size, int *fsize_n
     tmp |= (cfg - 1)         << 3;                           /* codec configuration */
     *toc++ = tmp;
     if (extended_toc) {
-        for (i = 0; i < (s->packet.frames - 1); i++)
+        for (i = 0; i < (s->pkt_frames - 1); i++)
             *fsize_needed |= (s->frame[i].framebits != s->frame[i + 1].framebits);
-        tmp = (*fsize_needed) << 7;                                /* vbr flag */
-        tmp |= (0) << 6;                                       /* padding flag */
-        tmp |= s->packet.frames;
+        tmp = (*fsize_needed) << 7;                                     /* vbr flag */
+        tmp |= s->pkt_frames;                    /* frame number - can be 0 as well */
         *toc++ = tmp;
     }
     *size = 1 + extended_toc;
@@ -118,7 +134,7 @@ static void celt_frame_setup_input(OpusEncContext *s, CeltFrame *f)
     int sf, ch;
     AVFrame *cur = NULL;
     const int subframesize = s->avctx->frame_size;
-    int subframes = OPUS_BLOCK_SIZE(s->packet.framesize) / subframesize;
+    int subframes = OPUS_BLOCK_SIZE(s->pkt_framesize) / subframesize;
 
     cur = ff_bufqueue_get(&s->bufqueue);
 
@@ -158,7 +174,7 @@ static void celt_apply_preemph_filter(OpusEncContext *s, CeltFrame *f)
 {
     int i, sf, ch;
     const int subframesize = s->avctx->frame_size;
-    const int subframes = OPUS_BLOCK_SIZE(s->packet.framesize) / subframesize;
+    const int subframes = OPUS_BLOCK_SIZE(s->pkt_framesize) / subframesize;
 
     /* Filter overlap */
     for (ch = 0; ch < f->channels; ch++) {
@@ -191,18 +207,20 @@ static void celt_apply_preemph_filter(OpusEncContext *s, CeltFrame *f)
 /* Create the window and do the mdct */
 static void celt_frame_mdct(OpusEncContext *s, CeltFrame *f)
 {
-    int i, j, t, ch;
-    float *win = s->scratch, *temp = s->scratch + 1920;
+    int i, t, ch;
+    float *win = s->scratch;
 
+    /* I think I can use s->dsp->vector_fmul_window for transients at least */
     if (f->transient) {
         for (ch = 0; ch < f->channels; ch++) {
             CeltBlock *b = &f->block[ch];
             float *src1 = b->overlap;
             for (t = 0; t < f->blocks; t++) {
                 float *src2 = &b->samples[CELT_OVERLAP*t];
-                s->dsp->vector_fmul(win, src1, ff_celt_window, 128);
-                s->dsp->vector_fmul_reverse(&win[CELT_OVERLAP], src2,
-                                            ff_celt_window - 8, 128);
+                for (i = 0; i < CELT_OVERLAP; i++) {
+                    win[               i] = src1[i]*ff_celt_window[i];
+                    win[CELT_OVERLAP + i] = src2[i]*ff_celt_window[CELT_OVERLAP - i - 1];
+                }
                 src1 = src2;
                 s->mdct[0]->mdct(s->mdct[0], b->coeffs + t, win, f->blocks);
             }
@@ -210,25 +228,31 @@ static void celt_frame_mdct(OpusEncContext *s, CeltFrame *f)
     } else {
         int blk_len = OPUS_BLOCK_SIZE(f->size), wlen = OPUS_BLOCK_SIZE(f->size + 1);
         int rwin = blk_len - CELT_OVERLAP, lap_dst = (wlen - blk_len - CELT_OVERLAP) >> 1;
-        memset(win, 0, wlen*sizeof(float));
         for (ch = 0; ch < f->channels; ch++) {
             CeltBlock *b = &f->block[ch];
 
-            /* Overlap */
-            s->dsp->vector_fmul(temp, b->overlap, ff_celt_window, 128);
-            memcpy(win + lap_dst, temp, CELT_OVERLAP*sizeof(float));
+            memset(win, 0, wlen*sizeof(float));
 
-            /* Samples, flat top window */
             memcpy(&win[lap_dst + CELT_OVERLAP], b->samples, rwin*sizeof(float));
 
-            /* Samples, windowed */
-            s->dsp->vector_fmul_reverse(temp, b->samples + rwin,
-                                        ff_celt_window - 8, 128);
-            memcpy(win + lap_dst + blk_len, temp, CELT_OVERLAP*sizeof(float));
+            /* Alignment fucks me over */
+            //s->dsp->vector_fmul(&dst[lap_dst], b->overlap, ff_celt_window, CELT_OVERLAP);
+            //s->dsp->vector_fmul_reverse(&dst[lap_dst + blk_len - CELT_OVERLAP], b->samples, ff_celt_window, CELT_OVERLAP);
+
+            for (i = 0; i < CELT_OVERLAP; i++) {
+                win[lap_dst           + i] = b->overlap[i]       *ff_celt_window[i];
+                win[lap_dst + blk_len + i] = b->samples[rwin + i]*ff_celt_window[CELT_OVERLAP - i - 1];
+            }
 
             s->mdct[f->size]->mdct(s->mdct[f->size], b->coeffs, win, 1);
         }
     }
+}
+
+/* Fills the bands and normalizes them */
+static void celt_frame_map_norm_bands(OpusEncContext *s, CeltFrame *f)
+{
+    int i, j, ch;
 
     for (ch = 0; ch < f->channels; ch++) {
         CeltBlock *block = &f->block[ch];
@@ -282,7 +306,7 @@ static void celt_enc_tf(OpusRangeCoder *rc, CeltFrame *f)
         f->tf_change[i] = ff_celt_tf_select[f->size][f->transient][tf_select][f->tf_change[i]];
 }
 
-void ff_celt_enc_bitalloc(OpusRangeCoder *rc, CeltFrame *f)
+static void ff_celt_enc_bitalloc(OpusRangeCoder *rc, CeltFrame *f)
 {
     int i, j, low, high, total, done, bandbits, remaining, tbits_8ths;
     int skip_startband      = f->start_band;
@@ -302,8 +326,6 @@ void ff_celt_enc_bitalloc(OpusRangeCoder *rc, CeltFrame *f)
     /* Tell the spread to the decoder */
     if (opus_rc_tell(rc) + 4 <= f->framebits)
         ff_opus_rc_enc_cdf(rc, f->spread, ff_celt_model_spread);
-    else
-        f->spread = CELT_SPREAD_NORMAL;
 
     /* Generate static allocation caps */
     for (i = 0; i < CELT_MAX_BANDS; i++) {
@@ -609,43 +631,6 @@ void ff_celt_enc_bitalloc(OpusRangeCoder *rc, CeltFrame *f)
     }
 }
 
-static void celt_enc_quant_pfilter(OpusRangeCoder *rc, CeltFrame *f)
-{
-    float gain = f->pf_gain;
-    int i, txval, octave = f->pf_octave, period = f->pf_period, tapset = f->pf_tapset;
-
-    ff_opus_rc_enc_log(rc, f->pfilter, 1);
-    if (!f->pfilter)
-        return;
-
-    /* Octave */
-    txval = FFMIN(octave, 6);
-    ff_opus_rc_enc_uint(rc, txval, 6);
-    octave = txval;
-    /* Period */
-    txval = av_clip(period - (16 << octave) + 1, 0, (1 << (4 + octave)) - 1);
-    ff_opus_rc_put_raw(rc, period, 4 + octave);
-    period = txval + (16 << octave) - 1;
-    /* Gain */
-    txval = FFMIN(((int)(gain / 0.09375f)) - 1, 7);
-    ff_opus_rc_put_raw(rc, txval, 3);
-    gain   = 0.09375f * (txval + 1);
-    /* Tapset */
-    if ((opus_rc_tell(rc) + 2) <= f->framebits)
-        ff_opus_rc_enc_cdf(rc, tapset, ff_celt_model_tapset);
-    else
-        tapset = 0;
-    /* Finally create the coeffs */
-    for (i = 0; i < 2; i++) {
-        CeltBlock *block = &f->block[i];
-
-        block->pf_period_new = FFMAX(period, CELT_POSTFILTER_MINPERIOD);
-        block->pf_gains_new[0] = gain * ff_celt_postfilter_taps[tapset][0];
-        block->pf_gains_new[1] = gain * ff_celt_postfilter_taps[tapset][1];
-        block->pf_gains_new[2] = gain * ff_celt_postfilter_taps[tapset][2];
-    }
-}
-
 static void exp_quant_coarse(OpusRangeCoder *rc, CeltFrame *f,
                              float last_energy[][CELT_MAX_BANDS], int intra)
 {
@@ -661,10 +646,10 @@ static void exp_quant_coarse(OpusRangeCoder *rc, CeltFrame *f,
 
     if (intra) {
         alpha = 0.0f;
-        beta  = 1.0f - (4915.0f/32768.0f);
+        beta  = 1.0f - 4915.0f/32768.0f;
     } else {
         alpha = ff_celt_alpha_coef[f->size];
-        beta  = ff_celt_beta_coef[f->size];
+        beta  = 1.0f - ff_celt_beta_coef[f->size];
     }
 
     for (i = f->start_band; i < f->end_band; i++) {
@@ -836,64 +821,39 @@ static void celt_quant_bands(OpusRangeCoder *rc, CeltFrame *f)
     }
 }
 
-static void celt_encode_frame(OpusEncContext *s, OpusRangeCoder *rc,
-                              CeltFrame *f, int index)
+static void celt_encode_frame(OpusEncContext *s, OpusRangeCoder *rc, CeltFrame *f)
 {
     int i, ch;
 
-    ff_opus_rc_enc_init(rc);
-
-    ff_opus_psy_celt_frame_init(&s->psyctx, f, index);
-
     celt_frame_setup_input(s, f);
-
-    if (f->silence) {
-        if (f->framebits >= 16)
-            ff_opus_rc_enc_log(rc, 1, 15); /* Silence (if using explicit singalling) */
-        for (ch = 0; ch < s->channels; ch++)
-            memset(s->last_quantized_energy[ch], 0.0f, sizeof(float)*CELT_MAX_BANDS);
-        return;
-    }
-
-    /* Filters */
     celt_apply_preemph_filter(s, f);
     if (f->pfilter) {
-        ff_opus_rc_enc_log(rc, 0, 15);
-        celt_enc_quant_pfilter(rc, f);
+        /* Not implemented */
+    }
+    celt_frame_mdct(s, f);
+    celt_frame_map_norm_bands(s, f);
+
+    ff_opus_rc_enc_log(rc, f->silence, 15);
+
+    if (!f->start_band && opus_rc_tell(rc) + 16 <= f->framebits)
+        ff_opus_rc_enc_log(rc, f->pfilter, 1);
+
+    if (f->pfilter) {
+        /* Not implemented */
     }
 
-    /* Transform */
-    celt_frame_mdct(s, f);
-
-    /* Need to handle transient/non-transient switches at any point during analysis */
-    while (ff_opus_psy_celt_frame_process(&s->psyctx, f, index))
-        celt_frame_mdct(s, f);
-
-    ff_opus_rc_enc_init(rc);
-
-    /* Silence */
-    ff_opus_rc_enc_log(rc, 0, 15);
-
-    /* Pitch filter */
-    if (!f->start_band && opus_rc_tell(rc) + 16 <= f->framebits)
-        celt_enc_quant_pfilter(rc, f);
-
-    /* Transient flag */
     if (f->size && opus_rc_tell(rc) + 3 <= f->framebits)
         ff_opus_rc_enc_log(rc, f->transient, 3);
 
-    /* Main encoding */
     celt_quant_coarse(rc, f, s->last_quantized_energy);
     celt_enc_tf      (rc, f);
     ff_celt_enc_bitalloc(rc, f);
     celt_quant_fine  (rc, f);
     celt_quant_bands (rc, f);
 
-    /* Anticollapse bit */
     if (f->anticollapse_needed)
         ff_opus_rc_put_raw(rc, f->anticollapse, 1);
 
-    /* Final per-band energy adjustments from leftover bits */
     celt_quant_final(s, rc, f);
 
     for (ch = 0; ch < f->channels; ch++) {
@@ -903,11 +863,49 @@ static void celt_encode_frame(OpusEncContext *s, OpusRangeCoder *rc,
     }
 }
 
-static inline int write_opuslacing(uint8_t *dst, int v)
+static void ff_opus_psy_process(OpusEncContext *s, int end, int *need_more)
 {
-    dst[0] = FFMIN(v - FFALIGN(v - 255, 4), v);
-    dst[1] = v - dst[0] >> 2;
-    return 1 + (v >= 252);
+    int max_delay_samples = (s->options.max_delay_ms*s->avctx->sample_rate)/1000;
+    int max_bsize = FFMIN(OPUS_SAMPLES_TO_BLOCK_SIZE(max_delay_samples), CELT_BLOCK_960);
+
+    s->pkt_frames = 1;
+    s->pkt_framesize = max_bsize;
+    s->mode = OPUS_MODE_CELT;
+    s->bandwidth = OPUS_BANDWIDTH_FULLBAND;
+
+    *need_more = s->bufqueue.available*s->avctx->frame_size < (max_delay_samples + CELT_OVERLAP);
+    /* Don't request more if we start being flushed with NULL frames */
+    *need_more = !end && *need_more;
+}
+
+static void ff_opus_psy_celt_frame_setup(OpusEncContext *s, CeltFrame *f, int index)
+{
+    int frame_size = OPUS_BLOCK_SIZE(s->pkt_framesize);
+
+    f->avctx = s->avctx;
+    f->dsp = s->dsp;
+    f->pvq = s->pvq;
+    f->start_band = (s->mode == OPUS_MODE_HYBRID) ? 17 : 0;
+    f->end_band = ff_celt_band_end[s->bandwidth];
+    f->channels = s->channels;
+    f->size = s->pkt_framesize;
+
+    /* Decisions */
+    f->silence = 0;
+    f->pfilter = 0;
+    f->transient = 0;
+    f->tf_select = 0;
+    f->anticollapse = 0;
+    f->alloc_trim = 5;
+    f->skip_band_floor = f->end_band;
+    f->intensity_stereo = f->end_band;
+    f->dual_stereo = 0;
+    f->spread = CELT_SPREAD_NORMAL;
+    memset(f->tf_change, 0, sizeof(int)*CELT_MAX_BANDS);
+    memset(f->alloc_boost, 0, sizeof(int)*CELT_MAX_BANDS);
+
+    f->blocks = f->transient ? frame_size/CELT_OVERLAP : 1;
+    f->framebits = FFALIGN(lrintf((double)s->avctx->bit_rate/(s->avctx->sample_rate/frame_size)), 8);
 }
 
 static void opus_packet_assembler(OpusEncContext *s, AVPacket *avpkt)
@@ -917,18 +915,8 @@ static void opus_packet_assembler(OpusEncContext *s, AVPacket *avpkt)
     /* Write toc */
     opus_gen_toc(s, avpkt->data, &offset, &fsize_needed);
 
-    /* Frame sizes if needed */
-    if (fsize_needed) {
-        for (i = 0; i < s->packet.frames - 1; i++) {
-            offset += write_opuslacing(avpkt->data + offset,
-                                       s->frame[i].framebits >> 3);
-        }
-    }
-
-    /* Packets */
-    for (i = 0; i < s->packet.frames; i++) {
-        ff_opus_rc_enc_end(&s->rc[i], avpkt->data + offset,
-                           s->frame[i].framebits >> 3);
+    for (i = 0; i < s->pkt_frames; i++) {
+        ff_opus_rc_enc_end(&s->rc[i], avpkt->data + offset, s->frame[i].framebits >> 3);
         offset += s->frame[i].framebits >> 3;
     }
 
@@ -960,27 +948,29 @@ static int opus_encode_frame(AVCodecContext *avctx, AVPacket *avpkt,
                              const AVFrame *frame, int *got_packet_ptr)
 {
     OpusEncContext *s = avctx->priv_data;
-    int i, ret, frame_size, alloc_size = 0;
+    int i, ret, frame_size, need_more, alloc_size = 0;
 
     if (frame) { /* Add new frame to queue */
         if ((ret = ff_af_queue_add(&s->afq, frame)) < 0)
             return ret;
         ff_bufqueue_add(avctx, &s->bufqueue, av_frame_clone(frame));
     } else {
-        ff_opus_psy_signal_eof(&s->psyctx);
         if (!s->afq.remaining_samples)
             return 0; /* We've been flushed and there's nothing left to encode */
     }
 
     /* Run the psychoacoustic system */
-    if (ff_opus_psy_process(&s->psyctx, &s->packet))
+    ff_opus_psy_process(s, !frame, &need_more);
+
+    /* Get more samples for lookahead/encoding */
+    if (need_more)
         return 0;
 
-    frame_size = OPUS_BLOCK_SIZE(s->packet.framesize);
+    frame_size = OPUS_BLOCK_SIZE(s->pkt_framesize);
 
     if (!frame) {
         /* This can go negative, that's not a problem, we only pad if positive */
-        int pad_empty = s->packet.frames*(frame_size/s->avctx->frame_size) - s->bufqueue.available + 1;
+        int pad_empty = s->pkt_frames*(frame_size/s->avctx->frame_size) - s->bufqueue.available + 1;
         /* Pad with empty 2.5 ms frames to whatever framesize was decided,
          * this should only happen at the very last flush frame. The frames
          * allocated here will be freed (because they have no other references)
@@ -993,13 +983,15 @@ static int opus_encode_frame(AVCodecContext *avctx, AVPacket *avpkt,
         }
     }
 
-    for (i = 0; i < s->packet.frames; i++) {
-        celt_encode_frame(s, &s->rc[i], &s->frame[i], i);
+    for (i = 0; i < s->pkt_frames; i++) {
+        ff_opus_rc_enc_init(&s->rc[i]);
+        ff_opus_psy_celt_frame_setup(s, &s->frame[i], i);
+        celt_encode_frame(s, &s->rc[i], &s->frame[i]);
         alloc_size += s->frame[i].framebits >> 3;
     }
 
     /* Worst case toc + the frame lengths if needed */
-    alloc_size += 2 + s->packet.frames*2;
+    alloc_size += 2 + s->pkt_frames*2;
 
     if ((ret = ff_alloc_packet2(avctx, avpkt, alloc_size, 0)) < 0)
         return ret;
@@ -1007,16 +999,13 @@ static int opus_encode_frame(AVCodecContext *avctx, AVPacket *avpkt,
     /* Assemble packet */
     opus_packet_assembler(s, avpkt);
 
-    /* Update the psychoacoustic system */
-    ff_opus_psy_postencode_update(&s->psyctx, s->frame, s->rc);
-
     /* Remove samples from queue and skip if needed */
-    ff_af_queue_remove(&s->afq, s->packet.frames*frame_size, &avpkt->pts, &avpkt->duration);
-    if (s->packet.frames*frame_size > avpkt->duration) {
+    ff_af_queue_remove(&s->afq, s->pkt_frames*frame_size, &avpkt->pts, &avpkt->duration);
+    if (s->pkt_frames*frame_size > avpkt->duration) {
         uint8_t *side = av_packet_new_side_data(avpkt, AV_PKT_DATA_SKIP_SAMPLES, 10);
         if (!side)
             return AVERROR(ENOMEM);
-        AV_WL32(&side[4], s->packet.frames*frame_size - avpkt->duration + 120);
+        AV_WL32(&side[4], s->pkt_frames*frame_size - avpkt->duration + 120);
     }
 
     *got_packet_ptr = 1;
@@ -1037,7 +1026,6 @@ static av_cold int opus_encode_end(AVCodecContext *avctx)
     av_freep(&s->frame);
     av_freep(&s->rc);
     ff_af_queue_close(&s->afq);
-    ff_opus_psy_end(&s->psyctx);
     ff_bufqueue_discard_all(&s->bufqueue);
     av_freep(&avctx->extradata);
 
@@ -1046,7 +1034,7 @@ static av_cold int opus_encode_end(AVCodecContext *avctx)
 
 static av_cold int opus_encode_init(AVCodecContext *avctx)
 {
-    int i, ch, ret, max_frames;
+    int i, ch, ret;
     OpusEncContext *s = avctx->priv_data;
 
     s->avctx = avctx;
@@ -1061,6 +1049,8 @@ static av_cold int opus_encode_init(AVCodecContext *avctx)
     /* Initial padding will change if SILK is ever supported */
     avctx->initial_padding = 120;
 
+    avctx->cutoff = !avctx->cutoff ? 20000 : avctx->cutoff;
+
     if (!avctx->bit_rate) {
         int coupled = ff_opus_default_coupled_streams[s->channels - 1];
         avctx->bit_rate = coupled*(96000) + (s->channels - coupled*2)*(48000);
@@ -1070,6 +1060,14 @@ static av_cold int opus_encode_init(AVCodecContext *avctx)
                avctx->bit_rate/1000, clipped_rate/1000);
         avctx->bit_rate = clipped_rate;
     }
+
+    /* Frame structs and range coder buffers */
+    s->frame = av_malloc(OPUS_MAX_FRAMES_PER_PACKET*sizeof(CeltFrame));
+    if (!s->frame)
+        return AVERROR(ENOMEM);
+    s->rc = av_malloc(OPUS_MAX_FRAMES_PER_PACKET*sizeof(OpusRangeCoder));
+    if (!s->rc)
+        return AVERROR(ENOMEM);
 
     /* Extradata */
     avctx->extradata_size = 19;
@@ -1091,41 +1089,27 @@ static av_cold int opus_encode_init(AVCodecContext *avctx)
         if ((ret = ff_mdct15_init(&s->mdct[i], 0, i + 3, 68 << (CELT_BLOCK_NB - 1 - i))))
             return AVERROR(ENOMEM);
 
+    for (i = 0; i < OPUS_MAX_FRAMES_PER_PACKET; i++) {
+        s->frame[i].block[0].emph_coeff = s->frame[i].block[1].emph_coeff = 0.0f;
+        s->frame[i].seed = 0;
+    }
+
     /* Zero out previous energy (matters for inter first frame) */
     for (ch = 0; ch < s->channels; ch++)
-        memset(s->last_quantized_energy[ch], 0.0f, sizeof(float)*CELT_MAX_BANDS);
+        for (i = 0; i < CELT_MAX_BANDS; i++)
+            s->last_quantized_energy[ch][i] = 0.0f;
 
     /* Allocate an empty frame to use as overlap for the first frame of audio */
     ff_bufqueue_add(avctx, &s->bufqueue, spawn_empty_frame(s));
     if (!ff_bufqueue_peek(&s->bufqueue, 0))
         return AVERROR(ENOMEM);
 
-    if ((ret = ff_opus_psy_init(&s->psyctx, s->avctx, &s->bufqueue, &s->options)))
-        return ret;
-
-    /* Frame structs and range coder buffers */
-    max_frames = ceilf(FFMIN(s->options.max_delay_ms, 120.0f)/2.5f);
-    s->frame = av_malloc(max_frames*sizeof(CeltFrame));
-    if (!s->frame)
-        return AVERROR(ENOMEM);
-    s->rc = av_malloc(max_frames*sizeof(OpusRangeCoder));
-    if (!s->rc)
-        return AVERROR(ENOMEM);
-
-    for (i = 0; i < max_frames; i++) {
-        s->frame[i].dsp = s->dsp;
-        s->frame[i].avctx = s->avctx;
-        s->frame[i].seed = 0;
-        s->frame[i].pvq = s->pvq;
-        s->frame[i].block[0].emph_coeff = s->frame[i].block[1].emph_coeff = 0.0f;
-    }
-
     return 0;
 }
 
 #define OPUSENC_FLAGS AV_OPT_FLAG_ENCODING_PARAM | AV_OPT_FLAG_AUDIO_PARAM
 static const AVOption opusenc_options[] = {
-    { "opus_delay", "Maximum delay in milliseconds", offsetof(OpusEncContext, options.max_delay_ms), AV_OPT_TYPE_FLOAT, { .dbl = OPUS_MAX_LOOKAHEAD }, 2.5f, OPUS_MAX_LOOKAHEAD, OPUSENC_FLAGS, "max_delay_ms" },
+    { "opus_delay", "Maximum delay (and lookahead) in milliseconds", offsetof(OpusEncContext, options.max_delay_ms), AV_OPT_TYPE_FLOAT, { .dbl = OPUS_MAX_LOOKAHEAD }, 2.5f, OPUS_MAX_LOOKAHEAD, OPUSENC_FLAGS },
     { NULL },
 };
 

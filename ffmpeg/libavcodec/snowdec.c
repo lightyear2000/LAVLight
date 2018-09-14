@@ -140,7 +140,7 @@ static inline void decode_subband_slice_buffered(SnowContext *s, SubBand *b, sli
         v = b->x_coeff[new_index].coeff;
         x = b->x_coeff[new_index++].x;
         while(x < w){
-            register int t= (int)( (v>>1)*(unsigned)qmul + qadd)>>QEXPSHIFT;
+            register int t= ( (v>>1)*qmul + qadd)>>QEXPSHIFT;
             register int u= -(v&1);
             line[x] = (t^u) - u;
 
@@ -228,9 +228,9 @@ static void dequantize_slice_buffered(SnowContext *s, slice_buffer * sb, SubBand
         for(x=0; x<w; x++){
             int i= line[x];
             if(i<0){
-                line[x]= -((-i*(unsigned)qmul + qadd)>>(QEXPSHIFT)); //FIXME try different bias
+                line[x]= -((-i*qmul + qadd)>>(QEXPSHIFT)); //FIXME try different bias
             }else if(i>0){
-                line[x]=  (( i*(unsigned)qmul + qadd)>>(QEXPSHIFT));
+                line[x]=  (( i*qmul + qadd)>>(QEXPSHIFT));
             }
         }
     }
@@ -355,7 +355,7 @@ static int decode_header(SnowContext *s){
                 Plane *p= &s->plane[plane_index];
                 p->diag_mc= get_rac(&s->c, s->header_state);
                 htaps= get_symbol(&s->c, s->header_state, 0)*2 + 2;
-                if((unsigned)htaps >= HTAPS_MAX || htaps==0)
+                if((unsigned)htaps > HTAPS_MAX || htaps==0)
                     return AVERROR_INVALIDDATA;
                 p->htaps= htaps;
                 for(i= htaps/2; i; i--){
@@ -584,7 +584,7 @@ static int decode_frame(AVCodecContext *avctx, void *data, int *got_frame,
                 for(; yq<slice_h && yq<h; yq++){
                     IDWTELEM * line = slice_buffer_get_line(&s->sb, yq);
                     for(x=0; x<w; x++){
-                        line[x] *= 1<<FRAC_BITS;
+                        line[x] <<= FRAC_BITS;
                     }
                 }
             }

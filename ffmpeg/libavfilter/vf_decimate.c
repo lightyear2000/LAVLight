@@ -276,24 +276,17 @@ static av_cold int decimate_init(AVFilterContext *ctx)
         .filter_frame = filter_frame,
         .config_props = config_input,
     };
-    int ret;
 
     if (!pad.name)
         return AVERROR(ENOMEM);
-    if ((ret = ff_insert_inpad(ctx, INPUT_MAIN, &pad)) < 0) {
-        av_freep(&pad.name);
-        return ret;
-    }
+    ff_insert_inpad(ctx, INPUT_MAIN, &pad);
 
     if (dm->ppsrc) {
         pad.name = av_strdup("clean_src");
         pad.config_props = NULL;
         if (!pad.name)
             return AVERROR(ENOMEM);
-        if ((ret = ff_insert_inpad(ctx, INPUT_CLEANSRC, &pad)) < 0) {
-            av_freep(&pad.name);
-            return ret;
-        }
+        ff_insert_inpad(ctx, INPUT_CLEANSRC, &pad);
     }
 
     if ((dm->blockx & (dm->blockx - 1)) ||

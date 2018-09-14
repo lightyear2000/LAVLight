@@ -829,6 +829,8 @@ static int read_channel_params(MLPDecodeContext *m, unsigned int substr,
         return AVERROR_INVALIDDATA;
     }
 
+    cp->sign_huff_offset = calculate_sign_huff(m, substr, ch);
+
     return 0;
 }
 
@@ -840,8 +842,7 @@ static int read_decoding_params(MLPDecodeContext *m, GetBitContext *gbp,
 {
     SubStream *s = &m->substream[substr];
     unsigned int ch;
-    int ret = 0;
-    unsigned recompute_sho = 0;
+    int ret;
 
     if (s->param_presence_flags & PARAM_PRESENCE)
         if (get_bits1(gbp))
@@ -881,36 +882,19 @@ static int read_decoding_params(MLPDecodeContext *m, GetBitContext *gbp,
     if (s->param_presence_flags & PARAM_QUANTSTEP)
         if (get_bits1(gbp))
             for (ch = 0; ch <= s->max_channel; ch++) {
+                ChannelParams *cp = &s->channel_params[ch];
+
                 s->quant_step_size[ch] = get_bits(gbp, 4);
 
-                recompute_sho |= 1<<ch;
+                cp->sign_huff_offset = calculate_sign_huff(m, substr, ch);
             }
 
     for (ch = s->min_channel; ch <= s->max_channel; ch++)
-        if (get_bits1(gbp)) {
-            recompute_sho |= 1<<ch;
+        if (get_bits1(gbp))
             if ((ret = read_channel_params(m, substr, gbp, ch)) < 0)
-                goto fail;
-        }
+                return ret;
 
-
-fail:
-    for (ch = 0; ch <= s->max_channel; ch++) {
-        if (recompute_sho & (1<<ch)) {
-            ChannelParams *cp = &s->channel_params[ch];
-
-            if (cp->codebook > 0 && cp->huff_lsbs < s->quant_step_size[ch]) {
-                if (ret >= 0) {
-                    av_log(m->avctx, AV_LOG_ERROR, "quant_step_size larger than huff_lsbs\n");
-                    ret = AVERROR_INVALIDDATA;
-                }
-                s->quant_step_size[ch] = 0;
-            }
-
-            cp->sign_huff_offset = calculate_sign_huff(m, substr, ch);
-        }
-    }
-    return ret;
+    return 0;
 }
 
 #define MSB_MASK(bits)  (-1u << (bits))

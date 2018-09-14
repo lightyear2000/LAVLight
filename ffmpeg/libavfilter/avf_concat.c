@@ -361,7 +361,6 @@ static av_cold int init(AVFilterContext *ctx)
 {
     ConcatContext *cat = ctx->priv;
     unsigned seg, type, str;
-    int ret;
 
     /* create input pads */
     for (seg = 0; seg < cat->nb_segments; seg++) {
@@ -374,10 +373,7 @@ static av_cold int init(AVFilterContext *ctx)
                     .filter_frame     = filter_frame,
                 };
                 pad.name = av_asprintf("in%d:%c%d", seg, "va"[type], str);
-                if ((ret = ff_insert_inpad(ctx, ctx->nb_inputs, &pad)) < 0) {
-                    av_freep(&pad.name);
-                    return ret;
-                }
+                ff_insert_inpad(ctx, ctx->nb_inputs, &pad);
             }
         }
     }
@@ -390,10 +386,7 @@ static av_cold int init(AVFilterContext *ctx)
                 .request_frame = request_frame,
             };
             pad.name = av_asprintf("out:%c%d", "va"[type], str);
-            if ((ret = ff_insert_outpad(ctx, ctx->nb_outputs, &pad)) < 0) {
-                av_freep(&pad.name);
-                return ret;
-            }
+            ff_insert_outpad(ctx, ctx->nb_outputs, &pad);
         }
     }
 

@@ -42,7 +42,6 @@
 #include "libavutil/dict.h"
 #include "libavutil/eval.h"
 #include "libavutil/fifo.h"
-#include "libavutil/hwcontext.h"
 #include "libavutil/pixfmt.h"
 #include "libavutil/rational.h"
 #include "libavutil/threadmessage.h"
@@ -68,7 +67,6 @@ enum HWAccelID {
     HWACCEL_QSV,
     HWACCEL_VAAPI,
     HWACCEL_CUVID,
-    HWACCEL_D3D11VA,
 };
 
 typedef struct HWAccel {
@@ -76,14 +74,7 @@ typedef struct HWAccel {
     int (*init)(AVCodecContext *s);
     enum HWAccelID id;
     enum AVPixelFormat pix_fmt;
-    enum AVHWDeviceType device_type;
 } HWAccel;
-
-typedef struct HWDevice {
-    char *name;
-    enum AVHWDeviceType type;
-    AVBufferRef *device_ref;
-} HWDevice;
 
 /* select an input stream for an output stream */
 typedef struct StreamMap {
@@ -629,7 +620,6 @@ extern AVBufferRef *hw_device_ctx;
 #if CONFIG_QSV
 extern char *qsv_device;
 #endif
-extern HWDevice *filter_hw_device;
 
 
 void term_init(void);
@@ -662,18 +652,13 @@ int ifilter_parameters_from_frame(InputFilter *ifilter, const AVFrame *frame);
 
 int ffmpeg_parse_options(int argc, char **argv);
 
+int vdpau_init(AVCodecContext *s);
+int dxva2_init(AVCodecContext *s);
 int vda_init(AVCodecContext *s);
 int videotoolbox_init(AVCodecContext *s);
 int qsv_init(AVCodecContext *s);
+int vaapi_decode_init(AVCodecContext *avctx);
+int vaapi_device_init(const char *device);
 int cuvid_init(AVCodecContext *s);
-
-HWDevice *hw_device_get_by_name(const char *name);
-int hw_device_init_from_string(const char *arg, HWDevice **dev);
-void hw_device_free_all(void);
-
-int hw_device_setup_for_decode(InputStream *ist);
-int hw_device_setup_for_encode(OutputStream *ost);
-
-int hwaccel_decode_init(AVCodecContext *avctx);
 
 #endif /* FFMPEG_H */

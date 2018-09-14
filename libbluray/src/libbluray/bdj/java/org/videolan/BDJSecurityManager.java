@@ -17,6 +17,7 @@
  * <http://www.gnu.org/licenses/>.
  */
 
+
 package org.videolan;
 
 import java.io.FilePermission;
@@ -276,7 +277,8 @@ final class BDJSecurityManager extends SecurityManager {
         throw new SecurityException("write access denied");
     }
 
-    private String getCanonPath(String origPath) {
+    private String getCanonPath(String origPath)
+    {
         String suffix = "";
 
         if (!java.io.BDFileSystem.isAbsolutePath(origPath)) {

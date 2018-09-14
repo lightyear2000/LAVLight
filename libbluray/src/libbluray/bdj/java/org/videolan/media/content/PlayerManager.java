@@ -116,7 +116,8 @@ public class PlayerManager {
         return false;
     }
 
-    protected void unregisterPlayer(BDHandler player) {
+    protected void unregisterPlayer(BDHandler player)
+    {
         synchronized (registeredPlayers) {
             if (registeredPlayers.contains(player)) {
                 registeredPlayers.remove(player);
@@ -124,7 +125,8 @@ public class PlayerManager {
         }
     }
 
-    protected void registerPlayer(BDHandler player) {
+    protected void registerPlayer(BDHandler player)
+    {
         synchronized (registeredPlayers) {
             if (!registeredPlayers.contains(player)) {
                 registeredPlayers.add(player);
@@ -138,9 +140,7 @@ public class PlayerManager {
 
     public boolean onEvent(int event, int param) {
         synchronized (stoppingLock) {
-            if (stopping) {
-                return false;
-            }
+            if (stopping) return false;
             synchronized (playlistPlayerLock) {
                 if (playlistPlayer != null)
                     return playlistPlayer.statusEvent(event, param);

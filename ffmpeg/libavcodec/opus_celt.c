@@ -29,21 +29,25 @@
 #include "opustab.h"
 #include "opus_pvq.h"
 
-/* Use the 2D z-transform to apply prediction in both the time domain (alpha)
- * and the frequency domain (beta) */
 static void celt_decode_coarse_energy(CeltFrame *f, OpusRangeCoder *rc)
 {
     int i, j;
-    float prev[2] = { 0 };
-    float alpha = ff_celt_alpha_coef[f->size];
-    float beta  = ff_celt_beta_coef[f->size];
-    const uint8_t *model = ff_celt_coarse_energy_dist[f->size][0];
+    float prev[2] = {0};
+    float alpha, beta;
+    const uint8_t *model;
 
-    /* intra frame */
-    if (opus_rc_tell(rc) + 3 <= f->framebits && ff_opus_rc_dec_log(rc, 3)) {
-        alpha = 0.0f;
-        beta  = 1.0f - (4915.0f/32768.0f);
+    /* use the 2D z-transform to apply prediction in both */
+    /* the time domain (alpha) and the frequency domain (beta) */
+
+    if (opus_rc_tell(rc)+3 <= f->framebits && ff_opus_rc_dec_log(rc, 3)) {
+        /* intra frame */
+        alpha = 0;
+        beta  = 1.0f - 4915.0f/32768.0f;
         model = ff_celt_coarse_energy_dist[f->size][1];
+    } else {
+        alpha = ff_celt_alpha_coef[f->size];
+        beta  = 1.0f - ff_celt_beta_coef[f->size];
+        model = ff_celt_coarse_energy_dist[f->size][0];
     }
 
     for (i = 0; i < CELT_MAX_BANDS; i++) {
@@ -481,7 +485,7 @@ static void celt_denormalize(CeltFrame *f, CeltBlock *block, float *data)
 
     for (i = f->start_band; i < f->end_band; i++) {
         float *dst = data + (ff_celt_freq_bands[i] << f->size);
-        float norm = exp2f(block->energy[i] + ff_celt_mean_energy[i]);
+        float norm = exp2(block->energy[i] + ff_celt_mean_energy[i]);
 
         for (j = 0; j < ff_celt_freq_range[i] << f->size; j++)
             dst[j] *= norm;
@@ -590,6 +594,11 @@ static void celt_postfilter(CeltFrame *f, CeltBlock *block)
 
 static int parse_postfilter(CeltFrame *f, OpusRangeCoder *rc, int consumed)
 {
+    static const float postfilter_taps[3][3] = {
+        { 0.3066406250f, 0.2170410156f, 0.1296386719f },
+        { 0.4638671875f, 0.2680664062f, 0.0           },
+        { 0.7998046875f, 0.1000976562f, 0.0           }
+    };
     int i;
 
     memset(f->block[0].pf_gains_new, 0, sizeof(f->block[0].pf_gains_new));
@@ -611,9 +620,9 @@ static int parse_postfilter(CeltFrame *f, OpusRangeCoder *rc, int consumed)
                 CeltBlock *block = &f->block[i];
 
                 block->pf_period_new = FFMAX(period, CELT_POSTFILTER_MINPERIOD);
-                block->pf_gains_new[0] = gain * ff_celt_postfilter_taps[tapset][0];
-                block->pf_gains_new[1] = gain * ff_celt_postfilter_taps[tapset][1];
-                block->pf_gains_new[2] = gain * ff_celt_postfilter_taps[tapset][2];
+                block->pf_gains_new[0] = gain * postfilter_taps[tapset][0];
+                block->pf_gains_new[1] = gain * postfilter_taps[tapset][1];
+                block->pf_gains_new[2] = gain * postfilter_taps[tapset][2];
             }
         }
 
@@ -655,7 +664,7 @@ static void process_anticollapse(CeltFrame *f, CeltBlock *block, float *X)
 
         /* r needs to be multiplied by 2 or 2*sqrt(2) depending on LM because
         short blocks don't have the same energy as long */
-        r = exp2f(1 - Ediff);
+        r = exp2(1 - Ediff);
         if (f->size == 3)
             r *= M_SQRT2;
         r = FFMIN(thresh, r) * sqrt_1;
@@ -771,9 +780,10 @@ int ff_celt_decode_frame(CeltFrame *f, OpusRangeCoder *rc,
                          float **output, int channels, int frame_size,
                          int start_band,  int end_band)
 {
-    int i, j, downmix = 0;
+    int i, j;
     int consumed;           // bits of entropy consumed thus far for this frame
     MDCT15Context *imdct;
+    float imdct_scale = 1.0;
 
     if (channels != 1 && channels != 2) {
         av_log(f->avctx, AV_LOG_ERROR, "Invalid number of coded channels: %d\n",
@@ -865,7 +875,7 @@ int ff_celt_decode_frame(CeltFrame *f, OpusRangeCoder *rc,
     /* stereo -> mono downmix */
     if (f->output_channels < f->channels) {
         f->dsp->vector_fmac_scalar(f->block[0].coeffs, f->block[1].coeffs, 1.0, FFALIGN(frame_size, 16));
-        downmix = 1;
+        imdct_scale = 0.5;
     } else if (f->output_channels > f->channels)
         memcpy(f->block[1].coeffs, f->block[0].coeffs, frame_size * sizeof(float));
 
@@ -890,24 +900,20 @@ int ff_celt_decode_frame(CeltFrame *f, OpusRangeCoder *rc,
             float *dst  = block->buf + 1024 + j * f->blocksize;
 
             imdct->imdct_half(imdct, dst + CELT_OVERLAP / 2, f->block[i].coeffs + j,
-                              f->blocks);
+                              f->blocks, imdct_scale);
             f->dsp->vector_fmul_window(dst, dst, dst + CELT_OVERLAP / 2,
                                        ff_celt_window, CELT_OVERLAP / 2);
         }
-
-        if (downmix)
-            f->dsp->vector_fmul_scalar(&block->buf[1024], &block->buf[1024], 0.5f, frame_size);
 
         /* postfilter */
         celt_postfilter(f, block);
 
         /* deemphasis and output scaling */
         for (j = 0; j < frame_size; j++) {
-            const float tmp = block->buf[1024 - frame_size + j] + m;
+            float tmp = block->buf[1024 - frame_size + j] + m;
             m = tmp * CELT_EMPH_COEFF;
-            output[i][j] = tmp;
+            output[i][j] = tmp / 32768.;
         }
-
         block->emph_coeff = m;
     }
 
@@ -1003,7 +1009,7 @@ int ff_celt_init(AVCodecContext *avctx, CeltFrame **f, int output_channels)
     frm->output_channels = output_channels;
 
     for (i = 0; i < FF_ARRAY_ELEMS(frm->imdct); i++)
-        if ((ret = ff_mdct15_init(&frm->imdct[i], 1, i + 3, -1.0f/32768)) < 0)
+        if ((ret = ff_mdct15_init(&frm->imdct[i], 1, i + 3, -1.0f)) < 0)
             goto fail;
 
     if ((ret = ff_celt_pvq_init(&frm->pvq)) < 0)

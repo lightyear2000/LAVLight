@@ -288,8 +288,6 @@ static int decode_picture_header(AVCodecContext *avctx, const uint8_t *buf, cons
                                                                         \
         if (q > switch_bits) { /* exp golomb */                         \
             bits = exp_order - switch_bits + (q<<1);                    \
-            if (bits > MIN_CACHE_BITS)                                  \
-                return AVERROR_INVALIDDATA;                             \
             val = SHOW_UBITS(re, gb, bits) - (1 << exp_order) +         \
                 ((switch_bits + 1) << rice_order);                      \
             SKIP_BITS(re, gb, bits);                                    \
@@ -309,7 +307,7 @@ static int decode_picture_header(AVCodecContext *avctx, const uint8_t *buf, cons
 
 static const uint8_t dc_codebook[7] = { 0x04, 0x28, 0x28, 0x4D, 0x4D, 0x70, 0x70};
 
-static av_always_inline int decode_dc_coeffs(GetBitContext *gb, int16_t *out,
+static av_always_inline void decode_dc_coeffs(GetBitContext *gb, int16_t *out,
                                               int blocks_per_slice)
 {
     int16_t prev_dc;
@@ -333,7 +331,6 @@ static av_always_inline int decode_dc_coeffs(GetBitContext *gb, int16_t *out,
         out[0] = prev_dc;
     }
     CLOSE_READER(re, gb);
-    return 0;
 }
 
 // adaptive codebook switching lut according to previous run/level values
@@ -400,8 +397,7 @@ static int decode_slice_luma(AVCodecContext *avctx, SliceContext *slice,
 
     init_get_bits(&gb, buf, buf_size << 3);
 
-    if ((ret = decode_dc_coeffs(&gb, blocks, blocks_per_slice)) < 0)
-        return ret;
+    decode_dc_coeffs(&gb, blocks, blocks_per_slice);
     if ((ret = decode_ac_coeffs(avctx, &gb, blocks, blocks_per_slice)) < 0)
         return ret;
 
@@ -434,8 +430,7 @@ static int decode_slice_chroma(AVCodecContext *avctx, SliceContext *slice,
 
     init_get_bits(&gb, buf, buf_size << 3);
 
-    if ((ret = decode_dc_coeffs(&gb, blocks, blocks_per_slice)) < 0)
-        return ret;
+    decode_dc_coeffs(&gb, blocks, blocks_per_slice);
     if ((ret = decode_ac_coeffs(avctx, &gb, blocks, blocks_per_slice)) < 0)
         return ret;
 

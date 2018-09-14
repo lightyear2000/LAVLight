@@ -442,14 +442,13 @@ static void *fifo_consumer_thread(void *data)
     return NULL;
 }
 
-static int fifo_mux_init(AVFormatContext *avf, AVOutputFormat *oformat,
-                         const char *filename)
+static int fifo_mux_init(AVFormatContext *avf, AVOutputFormat *oformat)
 {
     FifoContext *fifo = avf->priv_data;
     AVFormatContext *avf2;
     int ret = 0, i;
 
-    ret = avformat_alloc_output_context2(&avf2, oformat, NULL, filename);
+    ret = avformat_alloc_output_context2(&avf2, oformat, NULL, NULL);
     if (ret < 0)
         return ret;
 
@@ -506,7 +505,7 @@ static int fifo_init(AVFormatContext *avf)
         return ret;
     }
 
-    ret = fifo_mux_init(avf, oformat, avf->filename);
+    ret = fifo_mux_init(avf, oformat);
     if (ret < 0)
         return ret;
 

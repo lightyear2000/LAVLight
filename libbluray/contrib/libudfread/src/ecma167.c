@@ -37,7 +37,7 @@
  */
 
 /* fixed-length dstring, ECMA 1/7.2.12 */
-static uint8_t _decode_dstring(const uint8_t *p, size_t field_length, uint8_t *str)
+static size_t _decode_dstring(const uint8_t *p, size_t field_length, uint8_t *str)
 {
     size_t length;
 
@@ -51,7 +51,7 @@ static uint8_t _decode_dstring(const uint8_t *p, size_t field_length, uint8_t *s
         length = field_length;
     }
     memcpy(str, p, length);
-    return (uint8_t)length;
+    return length;
 }
 
 /* Extent Descriptor (ECMA 167, 3/7.1) */
@@ -85,10 +85,10 @@ enum tag_identifier decode_descriptor_tag(const uint8_t *buf)
 
   /* calculate tag checksum */
   for (i = 0; i < 4; i++) {
-      checksum = (uint8_t)(checksum + buf[i]);
+      checksum += buf[i];
   }
   for (i = 5; i < 16; i++) {
-      checksum = (uint8_t)(checksum + buf[i]);
+      checksum += buf[i];
   }
 
   if (checksum != buf[4]) {
@@ -106,7 +106,7 @@ void decode_primary_volume(const uint8_t *p, struct primary_volume_descriptor *p
     memcpy(pvd->volume_set_identifier, p + 72, 128);
 }
 
-/* Anchor Volume Descriptor Pointer (ECMA 167 3/10.2) */
+/* Anchor Volume Description Pointer (ECMA 167 3/10.2) */
 void decode_avdp(const uint8_t *p, struct anchor_volume_descriptor *avdp)
 {
     /* Main volume descriptor sequence extent */
@@ -114,12 +114,6 @@ void decode_avdp(const uint8_t *p, struct anchor_volume_descriptor *avdp)
 
     /* Reserve (backup) volume descriptor sequence extent */
     _decode_extent_ad(p + 24, &avdp->rvds);
-}
-
-/* Volume Descriptor Pointer (ECMA 167 3/10.3) */
-void decode_vdp(const uint8_t *p, struct volume_descriptor_pointer *vdp)
-{
-    _decode_extent_ad(p + 20, &vdp->next_extent);
 }
 
 /* Partition Descriptor (ECMA 167 3/10.5) */
@@ -150,11 +144,6 @@ void decode_logical_volume(const uint8_t *p, struct logical_volume_descriptor *l
         map_size = sizeof(lvd->partition_map_table);
     }
 
-    /* input size is one block (2048 bytes) */
-    if (map_size > 2048 - 440) {
-        map_size = 2048 - 440;
-    }
-
     memcpy(lvd->partition_map_table, p + 440, map_size);
 }
 
@@ -169,25 +158,15 @@ void decode_file_set_descriptor(const uint8_t *p, struct file_set_descriptor *fs
 }
 
 /* File Identifier (ECMA 167 4/14.4) */
-size_t decode_file_identifier(const uint8_t *p, size_t size, struct file_identifier *fi)
+size_t decode_file_identifier(const uint8_t *p, struct file_identifier *fi)
 {
     size_t l_iu; /* length of implementation use field */
-
-    if (size < 38) {
-        ecma_error("not enough data\n");
-        return 0;
-    }
 
     fi->characteristic = _get_u8(p + 18);
     fi->filename_len   = _get_u8(p + 19);
     decode_long_ad(p + 20, &fi->icb);
 
     l_iu = _get_u16(p + 36);
-
-    if (size < 38 + l_iu + fi->filename_len) {
-        ecma_error("not enough data\n");
-        return 0;
-    }
 
     if (fi->filename_len) {
         memcpy(fi->filename, p + 38 + l_iu, fi->filename_len);
@@ -253,13 +232,14 @@ static void _decode_extended_ad(const uint8_t *buf, struct long_ad *ad)
 
 /* File Entry */
 
-static void _decode_file_ads(const uint8_t *p, int ad_type, uint16_t partition,
+static void _decode_file_ads(const uint8_t *p, int flags, uint16_t partition,
                              struct long_ad *ad, unsigned num_ad)
 {
     uint32_t i;
 
+    flags &= 7;
     for (i = 0; i < num_ad; i++) {
-        switch (ad_type) {
+        switch (flags) {
         case 0:
             _decode_short_ad(p, partition, &ad[i]);
             p += 8;
@@ -321,17 +301,16 @@ static struct file_entry *_decode_file_entry(const uint8_t *p, size_t size,
 
     fe->file_type = tag.file_type;
     fe->length    = _get_u64(p + 56);
-    fe->ad_type   = tag.flags & 7;
+    fe->num_ad    = num_ad;
+    fe->icb_flags = tag.flags;
 
     if (content_inline) {
         /* data of small files can be embedded in file entry */
         /* copy embedded file data */
         fe->content_inline = 1;
-        fe->u.data.information_length = l_ad;
-        memcpy(fe->u.data.content, p + p_ad, l_ad);
+        memcpy(fe->data.content, p + p_ad, l_ad);
     } else {
-        fe->u.ads.num_ad = num_ad;
-        _decode_file_ads(p + p_ad, fe->ad_type, partition, &fe->u.ads.ad[0], num_ad);
+        _decode_file_ads(p + p_ad, tag.flags, partition, &fe->data.ad[0], num_ad);
     }
 
     return fe;
@@ -348,11 +327,12 @@ int decode_allocation_extent(struct file_entry **p_fe, const uint8_t *p, size_t 
         return -1;
     }
 
-    switch (fe->ad_type) {
+    switch (fe->icb_flags & 7) {
         case 0: num_ad = l_ad / 8;  break;
         case 1: num_ad = l_ad / 16; break;
         case 2: num_ad = l_ad / 20; break;
         default:
+            ecma_error("decode_allocation_extent: unsupported icb flags 0x%x\n", fe->icb_flags);
             return -1;
     }
 
@@ -361,15 +341,21 @@ int decode_allocation_extent(struct file_entry **p_fe, const uint8_t *p, size_t 
         return 0;
     }
 
-    fe = (struct file_entry *)realloc(*p_fe, sizeof(struct file_entry) + sizeof(struct long_ad) * (fe->u.ads.num_ad + num_ad));
+    fe = (struct file_entry *)realloc(fe, sizeof(struct file_entry) + sizeof(struct long_ad) * (fe->num_ad + num_ad - 1));
     if (!fe) {
         return -1;
     }
     *p_fe = fe;
 
+    /* drop pointer to this extent from the end of ads */
+    if (fe->data.ad[fe->num_ad - 1].extent_type != ECMA_AD_EXTENT_AD) {
+        ecma_error("decode_allocation_extent: missing link ad\n");
+    }
+    fe->num_ad--;
+
     /* decode new allocation descriptors */
-    _decode_file_ads(p + 24, fe->ad_type, partition, &fe->u.ads.ad[fe->u.ads.num_ad], num_ad);
-    fe->u.ads.num_ad += num_ad;
+    _decode_file_ads(p + 24, fe->icb_flags, partition, &fe->data.ad[fe->num_ad], num_ad);
+    fe->num_ad += num_ad;
 
     return 0;
 }

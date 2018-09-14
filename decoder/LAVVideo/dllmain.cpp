@@ -51,7 +51,7 @@ const AMOVIESETUP_PIN sudpPinsVideoDec[] = {
 const AMOVIESETUP_FILTER sudFilterReg =
 {
   &__uuidof(CLAVVideo),       // filter clsid
-  L"LAV Light Video Decoder", // filter name
+  L"LAV Ligh Video Decoder",       // filter name
   MERIT_PREFERRED + 3,        // merit
   countof(sudpPinsVideoDec),
   sudpPinsVideoDec,

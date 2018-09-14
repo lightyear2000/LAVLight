@@ -33,6 +33,8 @@
 #include "mpegvideo.h"
 #include "h263.h"
 
+#define FF_ME_ITER 50
+
 static av_cold int encode_init(AVCodecContext *avctx)
 {
     SnowContext *s = avctx->priv_data;
@@ -50,7 +52,7 @@ FF_ENABLE_DEPRECATION_WARNINGS
        && (avctx->flags & AV_CODEC_FLAG_QSCALE)
        && avctx->global_quality == 0){
         av_log(avctx, AV_LOG_ERROR, "The 9/7 wavelet is incompatible with lossless mode.\n");
-        return AVERROR(EINVAL);
+        return -1;
     }
 #if FF_API_MOTION_EST
 FF_DISABLE_DEPRECATION_WARNINGS
@@ -84,8 +86,6 @@ FF_ENABLE_DEPRECATION_WARNINGS
 
     s->m.avctx   = avctx;
     s->m.bit_rate= avctx->bit_rate;
-    s->m.lmin    = avctx->mb_lmin;
-    s->m.lmax    = avctx->mb_lmax;
 
     s->m.me.temp      =
     s->m.me.scratchpad= av_mallocz_array((avctx->width+64), 2*16*2*sizeof(uint8_t));
@@ -107,9 +107,8 @@ FF_ENABLE_DEPRECATION_WARNINGS
             return AVERROR(ENOMEM);
     }
     if((avctx->flags&AV_CODEC_FLAG_PASS2) || !(avctx->flags&AV_CODEC_FLAG_QSCALE)){
-        ret = ff_rate_control_init(&s->m);
-        if(ret < 0)
-            return ret;
+        if(ff_rate_control_init(&s->m) < 0)
+            return -1;
     }
     s->pass1_rc= !(avctx->flags & (AV_CODEC_FLAG_QSCALE|AV_CODEC_FLAG_PASS2));
 
@@ -131,7 +130,7 @@ FF_ENABLE_DEPRECATION_WARNINGS
         break;*/
     default:
         av_log(avctx, AV_LOG_ERROR, "pixel format not supported\n");
-        return AVERROR_PATCHWELCOME;
+        return -1;
     }
     avcodec_get_chroma_sub_sample(avctx->pix_fmt, &s->chroma_h_shift, &s->chroma_v_shift);
 
@@ -834,7 +833,7 @@ static int encode_subband_c0run(SnowContext *s, SubBand *b, const IDWTELEM *src,
         for(y=0; y<h; y++){
             if(s->c.bytestream_end - s->c.bytestream < w*40){
                 av_log(s->avctx, AV_LOG_ERROR, "encoded frame too large\n");
-                return AVERROR(ENOMEM);
+                return -1;
             }
             for(x=0; x<w; x++){
                 int v, p=0;
@@ -1645,12 +1644,8 @@ static int encode_frame(AVCodecContext *avctx, AVPacket *pkt,
     }
 
     ff_snow_frame_start(s);
-#if FF_API_CODED_FRAME
-FF_DISABLE_DEPRECATION_WARNINGS
     av_frame_unref(avctx->coded_frame);
     ret = av_frame_ref(avctx->coded_frame, s->current_picture);
-FF_ENABLE_DEPRECATION_WARNINGS
-#endif
     if (ret < 0)
         return ret;
 
@@ -1680,9 +1675,7 @@ FF_ENABLE_DEPRECATION_WARNINGS
         s->m.f_code=1;
         s->m.pict_type = pic->pict_type;
 #if FF_API_MOTION_EST
-FF_DISABLE_DEPRECATION_WARNINGS
         s->m.me_method= s->avctx->me_method;
-FF_ENABLE_DEPRECATION_WARNINGS
 #endif
         s->m.motion_est= s->motion_est;
         s->m.me.scene_change_score=0;
@@ -1885,14 +1878,10 @@ FF_ENABLE_DEPRECATION_WARNINGS
     if(avctx->flags&AV_CODEC_FLAG_PASS1)
         ff_write_pass1_stats(&s->m);
     s->m.last_pict_type = s->m.pict_type;
-#if FF_API_STAT_BITS
-FF_DISABLE_DEPRECATION_WARNINGS
     avctx->frame_bits = s->m.frame_bits;
     avctx->mv_bits = s->m.mv_bits;
     avctx->misc_bits = s->m.misc_bits;
     avctx->p_tex_bits = s->m.p_tex_bits;
-FF_ENABLE_DEPRECATION_WARNINGS
-#endif
 
     emms_c();
 
@@ -1930,11 +1919,8 @@ static av_cold int encode_end(AVCodecContext *avctx)
 #define OFFSET(x) offsetof(SnowContext, x)
 #define VE AV_OPT_FLAG_VIDEO_PARAM | AV_OPT_FLAG_ENCODING_PARAM
 static const AVOption options[] = {
-    {"motion_est", "motion estimation algorithm", OFFSET(motion_est), AV_OPT_TYPE_INT, {.i64 = FF_ME_EPZS }, FF_ME_ZERO, FF_ME_ITER, VE, "motion_est" },
-    { "zero", NULL, 0, AV_OPT_TYPE_CONST, { .i64 = FF_ME_ZERO }, 0, 0, VE, "motion_est" },
-    { "epzs", NULL, 0, AV_OPT_TYPE_CONST, { .i64 = FF_ME_EPZS }, 0, 0, VE, "motion_est" },
-    { "xone", NULL, 0, AV_OPT_TYPE_CONST, { .i64 = FF_ME_XONE }, 0, 0, VE, "motion_est" },
-    { "iter", NULL, 0, AV_OPT_TYPE_CONST, { .i64 = FF_ME_ITER }, 0, 0, VE, "motion_est" },
+    FF_MPV_COMMON_OPTS
+    { "iter",           NULL, 0, AV_OPT_TYPE_CONST, { .i64 = FF_ME_ITER }, 0, 0, FF_MPV_OPT_FLAGS, "motion_est" },
     { "memc_only",      "Only do ME/MC (I frames -> ref, P frame -> ME+MC).",   OFFSET(memc_only), AV_OPT_TYPE_BOOL, { .i64 = 0 }, 0, 1, VE },
     { "no_bitstream",   "Skip final bitstream writeout.",                    OFFSET(no_bitstream), AV_OPT_TYPE_BOOL, { .i64 = 0 }, 0, 1, VE },
     { "intra_penalty",  "Penalty for intra blocks in block decission",      OFFSET(intra_penalty), AV_OPT_TYPE_INT, { .i64 = 0 }, 0, INT_MAX, VE },

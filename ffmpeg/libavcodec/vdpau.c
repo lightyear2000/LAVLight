@@ -127,8 +127,6 @@ int ff_vdpau_common_init(AVCodecContext *avctx, VdpDecoderProfile profile,
     VdpVideoSurfaceQueryCapabilities *surface_query_caps;
     VdpDecoderQueryCapabilities *decoder_query_caps;
     VdpDecoderCreate *create;
-    VdpGetInformationString *info;
-    const char *info_string;
     void *func;
     VdpStatus status;
     VdpBool supported;
@@ -209,23 +207,6 @@ int ff_vdpau_common_init(AVCodecContext *avctx, VdpDecoderProfile profile,
 
     if (level < 0)
         return AVERROR(ENOTSUP);
-
-    status = vdctx->get_proc_address(vdctx->device,
-                                     VDP_FUNC_ID_GET_INFORMATION_STRING,
-                                     &func);
-    if (status != VDP_STATUS_OK)
-        return vdpau_error(status);
-    else
-        info = func;
-
-    status = info(&info_string);
-    if (status != VDP_STATUS_OK)
-        return vdpau_error(status);
-    if (avctx->codec_id == AV_CODEC_ID_HEVC && strncmp(info_string, "NVIDIA ", 7) == 0 &&
-        !(avctx->hwaccel_flags & AV_HWACCEL_FLAG_ALLOW_PROFILE_MISMATCH)) {
-        av_log(avctx, AV_LOG_VERBOSE, "HEVC with NVIDIA VDPAU drivers is buggy, skipping.\n");
-        return AVERROR(ENOTSUP);
-    }
 
     status = vdctx->get_proc_address(vdctx->device,
                                      VDP_FUNC_ID_VIDEO_SURFACE_QUERY_CAPABILITIES,

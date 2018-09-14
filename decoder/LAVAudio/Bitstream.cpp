@@ -114,9 +114,6 @@ HRESULT CLAVAudio::CreateBitstreamContext(AVCodecID codec, WAVEFORMATEX *wfe)
   m_avBSContext->pb = m_avioBitstream;
   m_avBSContext->oformat->flags |= AVFMT_NOFILE;
 
-  // flush IO after every packet, so we can send it to the audio renderer immediately
-  m_avBSContext->flags |= AVFMT_FLAG_FLUSH_PACKETS;
-
   // DTS-HD is by default off, unless explicitly asked for
   if (m_settings.DTSHDFraming && m_settings.bBitstream[Bitstream_DTSHD] && !m_bForceDTSCore) {
     m_bDTSHD = TRUE;
@@ -286,7 +283,7 @@ void CLAVAudio::ActivateDTSHDMuxing()
   m_bDTSHD = TRUE;
 
   // Check if downstream actually accepts it..
-  const CMediaType &mt = CreateBitstreamMediaType(m_nCodecId, m_bsParser.m_dwSampleRate);
+  CMediaType &mt = CreateBitstreamMediaType(m_nCodecId, m_bsParser.m_dwSampleRate);
   HRESULT hr = m_pOutput->GetConnected()->QueryAccept(&mt);
   if (hr != S_OK) {
     DbgLog((LOG_TRACE, 20, L"-> But downstream doesn't want DTS-HD, sticking to DTS core"));

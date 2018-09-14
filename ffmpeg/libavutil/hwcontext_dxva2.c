@@ -307,10 +307,8 @@ static int dxva2_map_frame(AVHWFramesContext *ctx, AVFrame *dst, const AVFrame *
     }
 
     map = av_mallocz(sizeof(*map));
-    if (!map) {
-        err = AVERROR(ENOMEM);
+    if (!map)
         goto fail;
-    }
 
     err = ff_hwframe_map_create(src->hw_frames_ctx, dst, src,
                                 dxva2_unmap_frame, map);

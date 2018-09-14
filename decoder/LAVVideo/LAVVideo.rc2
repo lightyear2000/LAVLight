@@ -60,7 +60,7 @@ BEGIN
             VALUE "FileDescription", "LAV Light Video Decoder - DirectShow Video Decoder"
             VALUE "FileVersion", LAV_VERSION_STR
             VALUE "InternalName", "LAVVideo.ax"
-            VALUE "LegalCopyright", "Copyright (C) 2017 Lightyear"
+            VALUE "LegalCopyright", "Copyright (C) 2018 Lightyear"
             VALUE "OriginalFilename", "LAVVideo.ax"
             VALUE "ProductName", "LAV Light Video Decoder"
             VALUE "ProductVersion", LAV_VERSION_STR

@@ -41,7 +41,6 @@
 #include "bdnav/meta_data.h"
 #include "bdnav/clpi_parse.h"
 #include "bdnav/sound_parse.h"
-#include "bdnav/uo_mask.h"
 #include "hdmv/hdmv_vm.h"
 #include "hdmv/mobj_parse.h"
 #include "decoders/graphics_controller.h"
@@ -530,8 +529,8 @@ static void _update_uo_mask(BLURAY *bd)
     BD_UO_MASK old_mask = bd->uo_mask;
     BD_UO_MASK new_mask;
 
-    new_mask = uo_mask_combine(bd->title_uo_mask, bd->st0.uo_mask);
-    new_mask = uo_mask_combine(bd->gc_uo_mask,    new_mask);
+    new_mask = bd_uo_mask_combine(bd->title_uo_mask, bd->st0.uo_mask);
+    new_mask = bd_uo_mask_combine(bd->gc_uo_mask,    new_mask);
     if (_compressed_mask(old_mask) != _compressed_mask(new_mask)) {
         _queue_event(bd, BD_EVENT_UO_MASK_CHANGED, _compressed_mask(new_mask));
     }
@@ -605,8 +604,8 @@ static int _open_m2ts(BLURAY *bd, BD_STREAM *st)
                 MPLS_PL *pl = st->clip->title->pl;
                 MPLS_STN *stn = &pl->play_item[st->clip->ref].stn;
 
-                st->uo_mask = uo_mask_combine(pl->app_info.uo_mask,
-                                              pl->play_item[st->clip->ref].uo_mask);
+                st->uo_mask = bd_uo_mask_combine(pl->app_info.uo_mask,
+                                                 pl->play_item[st->clip->ref].uo_mask);
                 _update_uo_mask(bd);
 
                 st->m2ts_filter = m2ts_filter_init((int64_t)st->clip->in_time << 1,
@@ -913,42 +912,27 @@ static int _run_gc(BLURAY *bd, gc_ctrl_e msg, uint32_t param)
  * disc info
  */
 
-static void _check_bdj(BLURAY *bd)
+const BLURAY_DISC_INFO *bd_get_disc_info(BLURAY *bd)
 {
-#ifdef USING_BDJAVA
-    if (!bd->disc_info.bdj_handled) {
-        if (!bd->disc || bd->disc_info.bdj_detected) {
-
-            /* Check if jvm + jar can be loaded ? */
-            switch (bdj_jvm_available(&bd->bdjstorage)) {
-            case 2: bd->disc_info.bdj_handled = 1;
-                    /* fall thru */
-            case 1: bd->disc_info.libjvm_detected = 1;
-            default:;
-            }
-        }
-    }
-#endif /* USING_BDJAVA */
+    return &bd->disc_info;
 }
 
 static void _fill_disc_info(BLURAY *bd, BD_ENC_INFO *enc_info)
 {
-    INDX_ROOT *index = NULL;
+    bd->disc_info.aacs_detected      = enc_info->aacs_detected;
+    bd->disc_info.libaacs_detected   = enc_info->libaacs_detected;
+    bd->disc_info.aacs_error_code    = enc_info->aacs_error_code;
+    bd->disc_info.aacs_handled       = enc_info->aacs_handled;
+    bd->disc_info.aacs_mkbv          = enc_info->aacs_mkbv;
+    memcpy(bd->disc_info.disc_id, enc_info->disc_id, 20);
+    bd->disc_info.bdplus_detected    = enc_info->bdplus_detected;
+    bd->disc_info.libbdplus_detected = enc_info->libbdplus_detected;
+    bd->disc_info.bdplus_handled     = enc_info->bdplus_handled;
+    bd->disc_info.bdplus_gen         = enc_info->bdplus_gen;
+    bd->disc_info.bdplus_date        = enc_info->bdplus_date;
+    bd->disc_info.no_menu_support    = enc_info->no_menu_support;
 
-    if (enc_info) {
-        bd->disc_info.aacs_detected      = enc_info->aacs_detected;
-        bd->disc_info.libaacs_detected   = enc_info->libaacs_detected;
-        bd->disc_info.aacs_error_code    = enc_info->aacs_error_code;
-        bd->disc_info.aacs_handled       = enc_info->aacs_handled;
-        bd->disc_info.aacs_mkbv          = enc_info->aacs_mkbv;
-        memcpy(bd->disc_info.disc_id, enc_info->disc_id, 20);
-        bd->disc_info.bdplus_detected    = enc_info->bdplus_detected;
-        bd->disc_info.libbdplus_detected = enc_info->libbdplus_detected;
-        bd->disc_info.bdplus_handled     = enc_info->bdplus_handled;
-        bd->disc_info.bdplus_gen         = enc_info->bdplus_gen;
-        bd->disc_info.bdplus_date        = enc_info->bdplus_date;
-        bd->disc_info.no_menu_support    = enc_info->no_menu_support;
-    }
+    bd->disc_info.udf_volume_id      = disc_volume_id(bd->disc);
 
     bd->disc_info.bluray_detected        = 0;
     bd->disc_info.top_menu_supported     = 0;
@@ -959,6 +943,8 @@ static void _fill_disc_info(BLURAY *bd, BD_ENC_INFO *enc_info)
 
     bd->disc_info.bdj_detected    = 0;
     bd->disc_info.bdj_supported   = 0;
+    bd->disc_info.libjvm_detected = 0;
+    bd->disc_info.bdj_handled     = 0;
 
     bd->disc_info.num_titles  = 0;
     bd->disc_info.titles      = NULL;
@@ -970,11 +956,7 @@ static void _fill_disc_info(BLURAY *bd, BD_ENC_INFO *enc_info)
     memset(bd->disc_info.bdj_org_id,  0, sizeof(bd->disc_info.bdj_org_id));
     memset(bd->disc_info.bdj_disc_id, 0, sizeof(bd->disc_info.bdj_disc_id));
 
-    if (bd->disc) {
-        bd->disc_info.udf_volume_id = disc_volume_id(bd->disc);
-        index = indx_get(bd->disc);
-    }
-
+    INDX_ROOT *index = indx_get(bd->disc);
     if (index) {
         INDX_PLAY_ITEM *pi;
         unsigned        ii;
@@ -1043,9 +1025,21 @@ static void _fill_disc_info(BLURAY *bd, BD_ENC_INFO *enc_info)
             titles[0]->id_ref = pi->hdmv.id_ref;
         }
 
-        /* mark supported titles */
+        /* check for BD-J capability */
 
-        _check_bdj(bd);
+#ifdef USING_BDJAVA
+        if (bd->disc_info.bdj_detected) {
+            bd->disc_info.bdj_supported = 1;
+            /* BD-J titles found. Check if jvm + jar can be loaded ? */
+            switch (bdj_jvm_available(&bd->bdjstorage)) {
+                case 2: bd->disc_info.bdj_handled     = 1;
+                case 1: bd->disc_info.libjvm_detected = 1;
+                default:;
+            }
+        }
+#endif /* USING_BDJAVA */
+
+        /* mark supported titles */
 
         if (bd->disc_info.bdj_detected && !bd->disc_info.bdj_handled) {
             bd->disc_info.num_unsupported_titles = bd->disc_info.num_bdj_titles;
@@ -1081,15 +1075,6 @@ static void _fill_disc_info(BLURAY *bd, BD_ENC_INFO *enc_info)
         /* populate title names */
         bd_get_meta(bd);
 
-        /* no BD-J menu support for profile 6 */
-        if (bd->disc_info.num_bdj_titles) {
-            // XXX actually, should check from bdjo files ...
-            if (index->indx_version >= ('0' << 24 | '3' << 16 | '0' << 8 | '0')) {
-                BD_DEBUG(DBG_CRIT | DBG_BLURAY, "WARNING: BluRay profile 6 BD-J menus are not supported\n");
-                bd->disc_info.no_menu_support = 1;
-            }
-        }
-
         indx_free(&index);
     }
 
@@ -1107,18 +1092,6 @@ static void _fill_disc_info(BLURAY *bd, BD_ENC_INFO *enc_info)
             bdid_free(&bdid);
         }
     }
-
-    _check_bdj(bd);
-}
-
-const BLURAY_DISC_INFO *bd_get_disc_info(BLURAY *bd)
-{
-    if (!bd->disc) {
-        BD_ENC_INFO enc_info;
-        memset(&enc_info, 0, sizeof(enc_info));
-        _fill_disc_info(bd, &enc_info);
-    }
-    return &bd->disc_info;
 }
 
 /*
@@ -1528,8 +1501,12 @@ void bd_close(BLURAY *bd)
     _close_preload(&bd->st_ig);
     _close_preload(&bd->st_textst);
 
-    nav_free_title_list(&bd->title_list);
-    nav_title_close(&bd->title);
+    if (bd->title_list != NULL) {
+        nav_free_title_list(bd->title_list);
+    }
+    if (bd->title != NULL) {
+        nav_title_close(bd->title);
+    }
 
     hdmv_vm_free(&bd->hdmv_vm);
 
@@ -2160,7 +2137,7 @@ static int _preload_textst_subpath(BLURAY *bd)
     gc_run(bd->graphics_controller, GC_CTRL_PG_RESET, 0, NULL);
 
     bd->st_textst.clip = &bd->title->sub_path[textst_subpath].clip_list.clip[textst_subclip];
-    if (!bd->st_textst.clip->cl) {
+    if (!bd->st0.clip->cl) {
         /* required for fonts */
         BD_DEBUG(DBG_BLURAY | DBG_CRIT, "_preload_textst_subpath(): missing clip data\n");
         return -1;
@@ -2332,39 +2309,15 @@ static void _close_playlist(BLURAY *bd)
     _close_preload(&bd->st_ig);
     _close_preload(&bd->st_textst);
 
-    nav_title_close(&bd->title);
+    if (bd->title) {
+        nav_title_close(bd->title);
+        bd->title = NULL;
+    }
 
     /* reset UO mask */
     memset(&bd->st0.uo_mask, 0, sizeof(BD_UO_MASK));
     memset(&bd->gc_uo_mask,  0, sizeof(BD_UO_MASK));
     _update_uo_mask(bd);
-}
-
-static int _add_known_playlist(BD_DISC *p, const char *mpls_id)
-{
-    char *old_mpls_ids;
-    char *new_mpls_ids = NULL;
-    int result = -1;
-
-    old_mpls_ids = disc_property_get(p, DISC_PROPERTY_PLAYLISTS);
-    if (!old_mpls_ids) {
-        return disc_property_put(p, DISC_PROPERTY_PLAYLISTS, mpls_id);
-    }
-
-    /* no duplicates */
-    if (str_strcasestr(old_mpls_ids, mpls_id)) {
-        goto out;
-    }
-
-    new_mpls_ids = str_printf("%s,%s", old_mpls_ids, mpls_id);
-    if (new_mpls_ids) {
-        result = disc_property_put(p, DISC_PROPERTY_PLAYLISTS, new_mpls_ids);
-    }
-
- out:
-    X_FREE(old_mpls_ids);
-    X_FREE(new_mpls_ids);
-    return result;
 }
 
 static int _open_playlist(BLURAY *bd, const char *f_name, unsigned angle)
@@ -2396,11 +2349,6 @@ static int _open_playlist(BLURAY *bd, const char *f_name, unsigned angle)
         _preload_subpaths(bd);
 
         bd->st0.seek_flag = 1;
-
-        /* remember played playlists when using menus */
-        if (bd->title_type != title_undef) {
-            _add_known_playlist(bd->disc, bd->title->name);
-        }
 
         return 1;
     }
@@ -2616,7 +2564,9 @@ uint32_t bd_get_titles(BLURAY *bd, uint8_t flags, uint32_t min_title_length)
         return 0;
     }
 
-    nav_free_title_list(&bd->title_list);
+    if (bd->title_list != NULL) {
+        nav_free_title_list(bd->title_list);
+    }
     bd->title_list = nav_get_title_list(bd->disc, flags, min_title_length);
 
     if (!bd->title_list) {
@@ -2771,11 +2721,6 @@ static BLURAY_TITLE_INFO *_get_title_info(BLURAY *bd, uint32_t title_idx, uint32
     NAV_TITLE *title;
     BLURAY_TITLE_INFO *title_info;
 
-    /* current title ? => no need to load mpls file */
-    if (bd->title && bd->title->angle == angle && !strcmp(bd->title->name, mpls_name)) {
-        return _fill_title_info(bd->title, title_idx, playlist);
-    }
-
     title = nav_title_open(bd->disc, mpls_name, angle);
     if (title == NULL) {
         BD_DEBUG(DBG_BLURAY | DBG_CRIT, "Unable to open title %s!\n", mpls_name);
@@ -2784,7 +2729,7 @@ static BLURAY_TITLE_INFO *_get_title_info(BLURAY *bd, uint32_t title_idx, uint32
 
     title_info = _fill_title_info(title, title_idx, playlist);
 
-    nav_title_close(&title);
+    nav_title_close(title);
     return title_info;
 }
 
@@ -2916,22 +2861,25 @@ int bd_set_player_setting_str(BLURAY *bd, uint32_t idx, const char *s)
 
 #ifdef USING_BDJAVA
         case BLURAY_PLAYER_CACHE_ROOT:
-            bd_mutex_lock(&bd->mutex);
-            X_FREE(bd->bdjstorage.cache_root);
-            bd->bdjstorage.cache_root = str_dup(s);
-            bd_mutex_unlock(&bd->mutex);
-            BD_DEBUG(DBG_BDJ, "Cache root dir set to %s\n", bd->bdjstorage.cache_root);
-            return 1;
-
         case BLURAY_PLAYER_PERSISTENT_ROOT:
-            bd_mutex_lock(&bd->mutex);
-            X_FREE(bd->bdjstorage.persistent_root);
-            bd->bdjstorage.persistent_root = str_dup(s);
-            bd_mutex_unlock(&bd->mutex);
-            BD_DEBUG(DBG_BDJ, "Persistent root dir set to %s\n", bd->bdjstorage.persistent_root);
-            return 1;
-#endif /* USING_BDJAVA */
+            switch (idx) {
+                case BLURAY_PLAYER_CACHE_ROOT:
+                    bd_mutex_lock(&bd->mutex);
+                    X_FREE(bd->bdjstorage.cache_root);
+                    bd->bdjstorage.cache_root = str_dup(s);
+                    bd_mutex_unlock(&bd->mutex);
+                    BD_DEBUG(DBG_BDJ, "Cache root dir set to %s\n", bd->bdjstorage.cache_root);
+                    return 1;
 
+                case BLURAY_PLAYER_PERSISTENT_ROOT:
+                    bd_mutex_lock(&bd->mutex);
+                    X_FREE(bd->bdjstorage.persistent_root);
+                    bd->bdjstorage.persistent_root = str_dup(s);
+                    bd_mutex_unlock(&bd->mutex);
+                    BD_DEBUG(DBG_BDJ, "Persistent root dir set to %s\n", bd->bdjstorage.persistent_root);
+                    return 1;
+            }
+#endif /* USING_BDJAVA */
         default:
             return 0;
     }
@@ -3280,7 +3228,7 @@ static int _play_title(BLURAY *bd, unsigned title)
     }
 
     if (bd->disc_info.no_menu_support) {
-        BD_DEBUG(DBG_BLURAY | DBG_CRIT, "_play_title(): no menu support\n");
+        BD_DEBUG(DBG_BLURAY | DBG_CRIT, "bd_play(): no menu support\n");
         return 0;
     }
 
@@ -3879,8 +3827,6 @@ int bd_get_meta_file(BLURAY *bd, const char *name, void **data, int64_t *size)
  * Database access
  */
 
-#include "bdnav/mpls_parse.h"
-
 struct clpi_cl *bd_get_clpi(BLURAY *bd, unsigned clip_ref)
 {
     if (bd->title && clip_ref < bd->title->clip_list.count) {
@@ -3897,7 +3843,7 @@ struct clpi_cl *bd_read_clpi(const char *path)
 
 void bd_free_clpi(struct clpi_cl *cl)
 {
-    clpi_free(&cl);
+    clpi_free(cl);
 }
 
 struct mpls_pl *bd_read_mpls(const char *mpls_file)
@@ -3907,7 +3853,7 @@ struct mpls_pl *bd_read_mpls(const char *mpls_file)
 
 void bd_free_mpls(struct mpls_pl *pl)
 {
-    mpls_free(&pl);
+    mpls_free(pl);
 }
 
 struct mobj_objects *bd_read_mobj(const char *mobj_file)

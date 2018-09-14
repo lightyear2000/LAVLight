@@ -1,10 +1,9 @@
 // ***************************************************************
-//  SubRenderIntf.h           version: 1.0.9  -  date: 2015-10-10
+//  SubRenderIntf.h           version: 1.0.8  -  date: 2014-03-06
 //  -------------------------------------------------------------
-//  Copyright (C) 2011-2015, BSD license
+//  Copyright (C) 2011-2014, BSD license
 // ***************************************************************
 
-// 2015-10-10 1.0.9 added some optional information fields
 // 2014-03-06 1.0.8 added ISubRenderConsumer2::Clear() interface/method
 // 2014-03-05 1.0.7 auto-loading is now the provider's own responsibility
 // 2013-07-01 1.0.6 added support for TV level subtitle transport
@@ -184,9 +183,7 @@ interface ISubRenderFrame;
 
 // Base interface for both ISubRenderConsumer and ISubRenderProvider.
 
-//[uuid("7CFD3728-235E-4430-9A2D-9F25F426BD70")]
-//interface ISubRenderOptions : public IUnknown
-DECLARE_INTERFACE_IID_(ISubRenderOptions, IUnknown, "7CFD3728-235E-4430-9A2D-9F25F426BD70")
+interface __declspec(uuid("7CFD3728-235E-4430-9A2D-9F25F426BD70")) ISubRenderOptions : public IUnknown
 {
   // Allows one party to get information from the other party.
   // The memory for strings and binary data is allocated by the callee
@@ -235,16 +232,14 @@ DECLARE_INTERFACE_IID_(ISubRenderOptions, IUnknown, "7CFD3728-235E-4430-9A2D-9F2
 
   // optional fields for consumers:
   // "videoCropRect",        RECT,      info,   read only,  crops "originalVideoSize" down, e.g. because of detected black bars
-  // "croppedVideoOutputRect", RECT,    info,   read only,  final pos/size of the "videoCropRect", after all scaling operations
-  // "fullscreenRect",       RECT,      info,   read only,  for fullscreen drawing, this is the rect you want to stay in (left/top can be non-zero!)
+  // croppedVideoOutputRect, RECT,      info,   read only,  final pos/size of the "videoCropRect", after all scaling operations
+  // fullscreenRect,         RECT,      info,   read only,  for fullscreen drawing, this is the rect you want to stay in (left/top can be non-zero!)
   // "displayModeSize",      SIZE,      info,   read only,  display mode width/height
   // "yuvMatrix",            LPWSTR,    info,   read only,  RGB Video: "None" (fullrange); YCbCr Video: "Levels.Matrix", Levels: TV|PC, Matrix: 601|709|240M|FCC|2020
   // "supportedLevels",      int,       info,   read only,  0: PC only (default); 1: PC+TV, no preference; 2: PC+TV, PC preferred; 3: PC+TV, TV preferred
 
   // optional fields for providers:
   // "outputLevels",         LPWSTR,    info,   read only,  are subtitles rendered/output in RGB "PC" (default) or "TV" levels?
-  // "isBitmap",             bool,      info,   read only,  are the subtitles bitmap based or text based?
-  // "isMovable",            bool,      info,   read only,  can the subtitles be repositioned safely?
 };
 
 // ---------------------------------------------------------------------------
@@ -253,9 +248,7 @@ DECLARE_INTERFACE_IID_(ISubRenderOptions, IUnknown, "7CFD3728-235E-4430-9A2D-9F2
 
 // This interface is exposed by every subtitle consumer.
 
-//[uuid("9DF90966-FE9F-4F0E-881E-DAF8A572D900")]
-//interface ISubRenderConsumer : public ISubRenderOptions
-DECLARE_INTERFACE_IID_(ISubRenderConsumer, ISubRenderOptions, "9DF90966-FE9F-4F0E-881E-DAF8A572D900")
+interface __declspec(uuid("9DF90966-FE9F-4F0E-881E-DAF8A572D900")) ISubRenderConsumer : public ISubRenderOptions
 {
   // Called by the subtitle renderer to ask the merit of the consumer.
   // Recommended merits:
@@ -297,9 +290,7 @@ DECLARE_INTERFACE_IID_(ISubRenderConsumer, ISubRenderOptions, "9DF90966-FE9F-4F0
   STDMETHOD(DeliverFrame)(REFERENCE_TIME start, REFERENCE_TIME stop, LPVOID context, ISubRenderFrame *subtitleFrame) = 0;
 };
 
-//[uuid("1A1737C8-2BF8-4BEA-97EA-3AB4FA8F7AC9")]
-//interface ISubRenderConsumer2 : public ISubRenderConsumer
-DECLARE_INTERFACE_IID_(ISubRenderConsumer2, ISubRenderConsumer, "1A1737C8-2BF8-4BEA-97EA-3AB4FA8F7AC9")
+interface __declspec(uuid("1A1737C8-2BF8-4BEA-97EA-3AB4FA8F7AC9")) ISubRenderConsumer2 : public ISubRenderConsumer
 {
   // Called by the subtitle renderer e.g. when the user switches to a
   // different subtitle track. The consumer should immediately release
@@ -315,9 +306,7 @@ DECLARE_INTERFACE_IID_(ISubRenderConsumer2, ISubRenderConsumer, "1A1737C8-2BF8-4
 // The subtitle renderer provides the consumer with this interface, when
 // calling the "ISubRenderConsumer.Connect()" method.
 
-//[uuid("20752113-C883-455A-BA7B-ABA4E9115CA8")]
-//interface ISubRenderProvider : public ISubRenderOptions
-DECLARE_INTERFACE_IID_(ISubRenderProvider, ISubRenderOptions, "20752113-C883-455A-BA7B-ABA4E9115CA8")
+interface __declspec(uuid("20752113-C883-455A-BA7B-ABA4E9115CA8")) ISubRenderProvider : public ISubRenderOptions
 {
   // Called by the consumer to request a rendered subtitle frame.
   // The subtitle renderer will deliver the frame when it is completed, by
@@ -345,9 +334,7 @@ DECLARE_INTERFACE_IID_(ISubRenderProvider, ISubRenderOptions, "20752113-C883-455
 
 // This interface is the reply to a consumer's frame render request.
 
-//[uuid("81746AB5-9407-4B43-A014-1FAAC340F973")]
-//interface ISubRenderFrame : public IUnknown
-DECLARE_INTERFACE_IID_(ISubRenderFrame, IUnknown, "81746AB5-9407-4B43-A014-1FAAC340F973")
+interface __declspec(uuid("81746AB5-9407-4B43-A014-1FAAC340F973")) ISubRenderFrame : public IUnknown
 {
   // "GetOutputRect()" specifies for which video rect the subtitles were
   // rendered. If the subtitle renderer doesn't scale the subtitles at all,

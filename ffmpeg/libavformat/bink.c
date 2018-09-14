@@ -65,12 +65,10 @@ static int probe(AVProbeData *p)
     int smush = AV_RN32(p->buf) == AV_RN32("SMUS");
 
     do {
-        if (((b[0] == 'B' && b[1] == 'I' && b[2] == 'K' && /* Bink 1 */
-             (b[3] == 'b' || b[3] == 'f' || b[3] == 'g' || b[3] == 'h' || b[3] == 'i' ||
-              b[3] == 'k')) ||
+        if (((b[0] == 'B' && b[1] == 'I' && b[2] == 'K' &&
+             (b[3] == 'b' || b[3] == 'f' || b[3] == 'g' || b[3] == 'h' || b[3] == 'i')) ||
              (b[0] == 'K' && b[1] == 'B' && b[2] == '2' && /* Bink 2 */
-             (b[3] == 'a' || b[3] == 'd' || b[3] == 'f' || b[3] == 'g' || b[3] == 'h' ||
-              b[3] == 'i' || b[3] == 'j' || b[3] == 'k'))) &&
+             (b[3] == 'a' || b[3] == 'd' || b[3] == 'f' || b[3] == 'g'))) &&
             AV_RL32(b+8) > 0 &&  // num_frames
             AV_RL32(b+20) > 0 && AV_RL32(b+20) <= BINK_MAX_WIDTH &&
             AV_RL32(b+24) > 0 && AV_RL32(b+24) <= BINK_MAX_HEIGHT &&
@@ -161,14 +159,7 @@ static int read_header(AVFormatContext *s)
     }
 
     if (bink->num_audio_tracks) {
-        uint32_t signature = (vst->codecpar->codec_tag & 0xFFFFFF);
-        uint8_t revision = ((vst->codecpar->codec_tag >> 24) % 0xFF);
-
-        if ((signature == AV_RL32("BIK") && (revision == 0x6b)) || /* k */
-            (signature == AV_RL32("KB2") && (revision == 0x69 || revision == 0x6a || revision == 0x6b))) /* i,j,k */
-            avio_skip(pb, 4); /* unknown new field */
-
-        avio_skip(pb, 4 * bink->num_audio_tracks); /* max decoded size */
+        avio_skip(pb, 4 * bink->num_audio_tracks);
 
         for (i = 0; i < bink->num_audio_tracks; i++) {
             ast = avformat_new_stream(s, NULL);

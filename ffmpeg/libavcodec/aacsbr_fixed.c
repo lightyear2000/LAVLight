@@ -291,9 +291,10 @@ static void sbr_hf_inverse_filter(SBRDSPContext *dsp,
         else if (shift <= -30)
             alpha0[k][0] = 0;
         else {
-            shift = 1-shift;
-            if (shift <= 0)
-                alpha0[k][0] = a00.mant * (1<<-shift);
+            a00.mant *= 2;
+            shift = 2-shift;
+            if (shift == 0)
+                alpha0[k][0] = a00.mant;
             else {
                 round = 1 << (shift-1);
                 alpha0[k][0] = (a00.mant + round) >> shift;
@@ -306,9 +307,10 @@ static void sbr_hf_inverse_filter(SBRDSPContext *dsp,
         else if (shift <= -30)
             alpha0[k][1] = 0;
         else {
-            shift = 1-shift;
-            if (shift <= 0)
-                alpha0[k][1] = a01.mant * (1<<-shift);
+            a01.mant *= 2;
+            shift = 2-shift;
+            if (shift == 0)
+                alpha0[k][1] = a01.mant;
             else {
                 round = 1 << (shift-1);
                 alpha0[k][1] = (a01.mant + round) >> shift;
@@ -320,9 +322,10 @@ static void sbr_hf_inverse_filter(SBRDSPContext *dsp,
         else if (shift <= -30)
             alpha1[k][0] = 0;
         else {
-            shift = 1-shift;
-            if (shift <= 0)
-                alpha1[k][0] = a10.mant * (1<<-shift);
+            a10.mant *= 2;
+            shift = 2-shift;
+            if (shift == 0)
+                alpha1[k][0] = a10.mant;
             else {
                 round = 1 << (shift-1);
                 alpha1[k][0] = (a10.mant + round) >> shift;
@@ -335,9 +338,10 @@ static void sbr_hf_inverse_filter(SBRDSPContext *dsp,
         else if (shift <= -30)
             alpha1[k][1] = 0;
         else {
-            shift = 1-shift;
-            if (shift <= 0)
-                alpha1[k][1] = a11.mant * (1<<-shift);
+            a11.mant *= 2;
+            shift = 2-shift;
+            if (shift == 0)
+                alpha1[k][1] = a11.mant;
             else {
                 round = 1 << (shift-1);
                 alpha1[k][1] = (a11.mant + round) >> shift;
@@ -571,30 +575,22 @@ static void sbr_hf_assemble(int Y1[38][64][2],
 
                 SoftFloat *in  = sbr->s_m[e];
                 for (m = 0; m+1 < m_max; m+=2) {
-                    int shift2;
                     shift = 22 - in[m  ].exp;
-                    shift2= 22 - in[m+1].exp;
-                    if (shift < 1 || shift2 < 1) {
-                        av_log(NULL, AV_LOG_ERROR, "Overflow in sbr_hf_assemble, shift=%d,%d\n", shift, shift2);
-                        return;
-                    }
                     if (shift < 32) {
                         round = 1 << (shift-1);
                         out[2*m  ] += (in[m  ].mant * A + round) >> shift;
                     }
 
-                    if (shift2 < 32) {
-                        round = 1 << (shift2-1);
-                        out[2*m+2] += (in[m+1].mant * B + round) >> shift2;
+                    shift = 22 - in[m+1].exp;
+                    if (shift < 32) {
+                        round = 1 << (shift-1);
+                        out[2*m+2] += (in[m+1].mant * B + round) >> shift;
                     }
                 }
                 if(m_max&1)
                 {
                     shift = 22 - in[m  ].exp;
-                    if (shift < 1) {
-                        av_log(NULL, AV_LOG_ERROR, "Overflow in sbr_hf_assemble, shift=%d\n", shift);
-                        return;
-                    } else if (shift < 32) {
+                    if (shift < 32) {
                         round = 1 << (shift-1);
                         out[2*m  ] += (in[m  ].mant * A + round) >> shift;
                     }

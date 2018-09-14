@@ -2026,24 +2026,24 @@ yuv2gbrp16_full_X_c(SwsContext *c, const int16_t *lumFilter,
                     const int16_t **lumSrcx, int lumFilterSize,
                     const int16_t *chrFilter, const int16_t **chrUSrcx,
                     const int16_t **chrVSrcx, int chrFilterSize,
-                    const int16_t **alpSrcx, uint8_t **dest,
+                    const int16_t **alpSrc, uint8_t **dest,
                     int dstW, int y)
 {
     const AVPixFmtDescriptor *desc = av_pix_fmt_desc_get(c->dstFormat);
     int i;
-    int hasAlpha = (desc->flags & AV_PIX_FMT_FLAG_ALPHA) && alpSrcx;
+    int hasAlpha = (desc->flags & AV_PIX_FMT_FLAG_ALPHA) && alpSrc;
     uint16_t **dest16 = (uint16_t**)dest;
     const int32_t **lumSrc  = (const int32_t**)lumSrcx;
     const int32_t **chrUSrc = (const int32_t**)chrUSrcx;
     const int32_t **chrVSrc = (const int32_t**)chrVSrcx;
-    const int32_t **alpSrc  = (const int32_t**)alpSrcx;
+    int A = 0; // init to silence warning
 
     for (i = 0; i < dstW; i++) {
         int j;
         int Y = -0x40000000;
         int U = -(128 << 23);
         int V = -(128 << 23);
-        int R, G, B, A;
+        int R, G, B;
 
         for (j = 0; j < lumFilterSize; j++)
             Y += lumSrc[j][i] * (unsigned)lumFilter[j];
@@ -2059,13 +2059,13 @@ yuv2gbrp16_full_X_c(SwsContext *c, const int16_t *lumFilter,
         V >>= 14;
 
         if (hasAlpha) {
-            A = -0x40000000;
+            A = 1 << 18;
 
             for (j = 0; j < lumFilterSize; j++)
                 A += alpSrc[j][i] * lumFilter[j];
 
-            A >>= 1;
-            A += 0x20002000;
+            if (A & 0xF8000000)
+                A =  av_clip_uintp2(A, 27);
         }
 
         Y -= c->yuv2rgb_y_offset;
@@ -2083,7 +2083,7 @@ yuv2gbrp16_full_X_c(SwsContext *c, const int16_t *lumFilter,
         dest16[1][i] = B >> 14;
         dest16[2][i] = R >> 14;
         if (hasAlpha)
-            dest16[3][i] = av_clip_uintp2(A, 30) >> 14;
+            dest16[3][i] = A >> 11;
     }
     if ((!isBE(c->dstFormat)) != (!HAVE_BIGENDIAN)) {
         for (i = 0; i < dstW; i++) {

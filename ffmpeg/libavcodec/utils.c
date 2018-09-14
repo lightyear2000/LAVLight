@@ -976,11 +976,11 @@ FF_ENABLE_DEPRECATION_WARNINGS
         }
         if (   (avctx->codec_type == AVMEDIA_TYPE_VIDEO || avctx->codec_type == AVMEDIA_TYPE_AUDIO)
             && avctx->bit_rate>0 && avctx->bit_rate<1000) {
-            av_log(avctx, AV_LOG_WARNING, "Bitrate %"PRId64" is extremely low, maybe you mean %"PRId64"k\n", avctx->bit_rate, avctx->bit_rate);
+            av_log(avctx, AV_LOG_WARNING, "Bitrate %"PRId64" is extremely low, maybe you mean %"PRId64"k\n", (int64_t)avctx->bit_rate, (int64_t)avctx->bit_rate);
         }
 
         if (!avctx->rc_initial_buffer_occupancy)
-            avctx->rc_initial_buffer_occupancy = avctx->rc_buffer_size * 3LL / 4;
+            avctx->rc_initial_buffer_occupancy = avctx->rc_buffer_size * 3 / 4;
 
         if (avctx->ticks_per_frame && avctx->time_base.num &&
             avctx->ticks_per_frame > INT_MAX / avctx->time_base.num) {
@@ -1531,7 +1531,7 @@ void avcodec_string(char *buf, int buf_size, AVCodecContext *enc, int encode)
                  ", %"PRId64" kb/s", bitrate / 1000);
     } else if (enc->rc_max_rate > 0) {
         snprintf(buf + strlen(buf), buf_size - strlen(buf),
-                 ", max. %"PRId64" kb/s", enc->rc_max_rate / 1000);
+                 ", max. %"PRId64" kb/s", (int64_t)enc->rc_max_rate / 1000);
     }
 }
 
@@ -1766,7 +1766,7 @@ static int get_audio_frame_duration(enum AVCodecID id, int sr, int ch, int ba,
 
         if (bps > 0) {
             /* calc from frame_bytes and bits_per_coded_sample */
-            if (id == AV_CODEC_ID_ADPCM_G726 || id == AV_CODEC_ID_ADPCM_G726LE)
+            if (id == AV_CODEC_ID_ADPCM_G726)
                 return frame_bytes * 8 / bps;
         }
 

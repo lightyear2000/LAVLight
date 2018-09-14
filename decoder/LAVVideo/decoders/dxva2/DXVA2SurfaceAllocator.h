@@ -22,7 +22,6 @@
 #pragma once
 
 #include <Mfidl.h>
-#include "MediaSampleSideData.h"
 
 class CDecDXVA2;
 
@@ -32,7 +31,7 @@ public IUnknown {
   STDMETHOD_(int, GetDXSurfaceId()) = 0;
 };
 
-class CDXVA2Sample : public CMediaSampleSideData, public IMFGetService, public ILAVDXVA2Sample
+class CDXVA2Sample : public CMediaSample, public IMFGetService, public ILAVDXVA2Sample
 {
   friend class CDXVA2SurfaceAllocator;
 

@@ -28,13 +28,13 @@
 #include "vp9dec.h"
 
 static av_always_inline void clamp_mv(VP56mv *dst, const VP56mv *src,
-                                      VP9TileData *td)
+                                      VP9Context *s)
 {
-    dst->x = av_clip(src->x, td->min_mv.x, td->max_mv.x);
-    dst->y = av_clip(src->y, td->min_mv.y, td->max_mv.y);
+    dst->x = av_clip(src->x, s->min_mv.x, s->max_mv.x);
+    dst->y = av_clip(src->y, s->min_mv.y, s->max_mv.y);
 }
 
-static void find_ref_mvs(VP9TileData *td,
+static void find_ref_mvs(VP9Context *s,
                          VP56mv *pmv, int ref, int z, int idx, int sb)
 {
     static const int8_t mv_ref_blk_off[N_BS_SIZES][8][2] = {
@@ -65,9 +65,8 @@ static void find_ref_mvs(VP9TileData *td,
         [BS_4x4]   = { {  0, -1 }, { -1,  0 }, { -1, -1 }, {  0, -2 },
                        { -2,  0 }, { -1, -2 }, { -2, -1 }, { -2, -2 } },
     };
-    VP9Context *s = td->s;
-    VP9Block *b = td->b;
-    int row = td->row, col = td->col, row7 = td->row7;
+    VP9Block *b = s->b;
+    int row = s->row, col = s->col, row7 = s->row7;
     const int8_t (*p)[2] = mv_ref_blk_off[b->bs];
 #define INVALID_MV 0x80008000U
     uint32_t mem = INVALID_MV, mem_sub8x8 = INVALID_MV;
@@ -104,7 +103,7 @@ static void find_ref_mvs(VP9TileData *td,
             av_assert2(idx == 1);                                      \
             av_assert2(mem != INVALID_MV);                             \
             if (mem_sub8x8 == INVALID_MV) {                            \
-                clamp_mv(&tmp, &mv, td);                               \
+                clamp_mv(&tmp, &mv, s);                                \
                 m = AV_RN32A(&tmp);                                    \
                 if (m != mem) {                                        \
                     AV_WN32A(pmv, m);                                  \
@@ -112,7 +111,7 @@ static void find_ref_mvs(VP9TileData *td,
                 }                                                      \
                 mem_sub8x8 = AV_RN32A(&mv);                            \
             } else if (mem_sub8x8 != AV_RN32A(&mv)) {                  \
-                clamp_mv(&tmp, &mv, td);                               \
+                clamp_mv(&tmp, &mv, s);                                \
                 m = AV_RN32A(&tmp);                                    \
                 if (m != mem) {                                        \
                     AV_WN32A(pmv, m);                                  \
@@ -125,12 +124,12 @@ static void find_ref_mvs(VP9TileData *td,
         } else {                                                       \
             uint32_t m = AV_RN32A(&mv);                                \
             if (!idx) {                                                \
-                clamp_mv(pmv, &mv, td);                                \
+                clamp_mv(pmv, &mv, s);                                 \
                 return;                                                \
             } else if (mem == INVALID_MV) {                            \
                 mem = m;                                               \
             } else if (m != mem) {                                     \
-                clamp_mv(pmv, &mv, td);                                \
+                clamp_mv(pmv, &mv, s);                                 \
                 return;                                                \
             }                                                          \
         }                                                              \
@@ -143,12 +142,12 @@ static void find_ref_mvs(VP9TileData *td,
             else if (mv->ref[1] == ref)
                 RETURN_MV(s->above_mv_ctx[2 * col + (sb & 1)][1]);
         }
-        if (col > td->tile_col_start) {
+        if (col > s->tile_col_start) {
             VP9mvrefPair *mv = &s->s.frames[CUR_FRAME].mv[row * s->sb_cols * 8 + col - 1];
             if (mv->ref[0] == ref)
-                RETURN_MV(td->left_mv_ctx[2 * row7 + (sb >> 1)][0]);
+                RETURN_MV(s->left_mv_ctx[2 * row7 + (sb >> 1)][0]);
             else if (mv->ref[1] == ref)
-                RETURN_MV(td->left_mv_ctx[2 * row7 + (sb >> 1)][1]);
+                RETURN_MV(s->left_mv_ctx[2 * row7 + (sb >> 1)][1]);
         }
         i = 2;
     } else {
@@ -159,7 +158,7 @@ static void find_ref_mvs(VP9TileData *td,
     for (; i < 8; i++) {
         int c = p[i][0] + col, r = p[i][1] + row;
 
-        if (c >= td->tile_col_start && c < s->cols &&
+        if (c >= s->tile_col_start && c < s->cols &&
             r >= 0 && r < s->rows) {
             VP9mvrefPair *mv = &s->s.frames[CUR_FRAME].mv[r * s->sb_cols * 8 + c];
 
@@ -196,7 +195,7 @@ static void find_ref_mvs(VP9TileData *td,
     for (i = 0; i < 8; i++) {
         int c = p[i][0] + col, r = p[i][1] + row;
 
-        if (c >= td->tile_col_start && c < s->cols && r >= 0 && r < s->rows) {
+        if (c >= s->tile_col_start && c < s->cols && r >= 0 && r < s->rows) {
             VP9mvrefPair *mv = &s->s.frames[CUR_FRAME].mv[r * s->sb_cols * 8 + c];
 
             if (mv->ref[0] != ref && mv->ref[0] >= 0)
@@ -227,71 +226,69 @@ static void find_ref_mvs(VP9TileData *td,
     }
 
     AV_ZERO32(pmv);
-    clamp_mv(pmv, pmv, td);
+    clamp_mv(pmv, pmv, s);
 #undef INVALID_MV
 #undef RETURN_MV
 #undef RETURN_SCALE_MV
 }
 
-static av_always_inline int read_mv_component(VP9TileData *td, int idx, int hp)
+static av_always_inline int read_mv_component(VP9Context *s, int idx, int hp)
 {
-    VP9Context *s = td->s;
-    int bit, sign = vp56_rac_get_prob(td->c, s->prob.p.mv_comp[idx].sign);
-    int n, c = vp8_rac_get_tree(td->c, ff_vp9_mv_class_tree,
+    int bit, sign = vp56_rac_get_prob(&s->c, s->prob.p.mv_comp[idx].sign);
+    int n, c = vp8_rac_get_tree(&s->c, ff_vp9_mv_class_tree,
                                 s->prob.p.mv_comp[idx].classes);
 
-    td->counts.mv_comp[idx].sign[sign]++;
-    td->counts.mv_comp[idx].classes[c]++;
+    s->counts.mv_comp[idx].sign[sign]++;
+    s->counts.mv_comp[idx].classes[c]++;
     if (c) {
         int m;
 
         for (n = 0, m = 0; m < c; m++) {
-            bit = vp56_rac_get_prob(td->c, s->prob.p.mv_comp[idx].bits[m]);
+            bit = vp56_rac_get_prob(&s->c, s->prob.p.mv_comp[idx].bits[m]);
             n |= bit << m;
-            td->counts.mv_comp[idx].bits[m][bit]++;
+            s->counts.mv_comp[idx].bits[m][bit]++;
         }
         n <<= 3;
-        bit = vp8_rac_get_tree(td->c, ff_vp9_mv_fp_tree,
+        bit = vp8_rac_get_tree(&s->c, ff_vp9_mv_fp_tree,
                                s->prob.p.mv_comp[idx].fp);
         n  |= bit << 1;
-        td->counts.mv_comp[idx].fp[bit]++;
+        s->counts.mv_comp[idx].fp[bit]++;
         if (hp) {
-            bit = vp56_rac_get_prob(td->c, s->prob.p.mv_comp[idx].hp);
-            td->counts.mv_comp[idx].hp[bit]++;
+            bit = vp56_rac_get_prob(&s->c, s->prob.p.mv_comp[idx].hp);
+            s->counts.mv_comp[idx].hp[bit]++;
             n |= bit;
         } else {
             n |= 1;
             // bug in libvpx - we count for bw entropy purposes even if the
             // bit wasn't coded
-            td->counts.mv_comp[idx].hp[1]++;
+            s->counts.mv_comp[idx].hp[1]++;
         }
         n += 8 << c;
     } else {
-        n = vp56_rac_get_prob(td->c, s->prob.p.mv_comp[idx].class0);
-        td->counts.mv_comp[idx].class0[n]++;
-        bit = vp8_rac_get_tree(td->c, ff_vp9_mv_fp_tree,
+        n = vp56_rac_get_prob(&s->c, s->prob.p.mv_comp[idx].class0);
+        s->counts.mv_comp[idx].class0[n]++;
+        bit = vp8_rac_get_tree(&s->c, ff_vp9_mv_fp_tree,
                                s->prob.p.mv_comp[idx].class0_fp[n]);
-        td->counts.mv_comp[idx].class0_fp[n][bit]++;
+        s->counts.mv_comp[idx].class0_fp[n][bit]++;
         n = (n << 3) | (bit << 1);
         if (hp) {
-            bit = vp56_rac_get_prob(td->c, s->prob.p.mv_comp[idx].class0_hp);
-            td->counts.mv_comp[idx].class0_hp[bit]++;
+            bit = vp56_rac_get_prob(&s->c, s->prob.p.mv_comp[idx].class0_hp);
+            s->counts.mv_comp[idx].class0_hp[bit]++;
             n |= bit;
         } else {
             n |= 1;
             // bug in libvpx - we count for bw entropy purposes even if the
             // bit wasn't coded
-            td->counts.mv_comp[idx].class0_hp[1]++;
+            s->counts.mv_comp[idx].class0_hp[1]++;
         }
     }
 
     return sign ? -(n + 1) : (n + 1);
 }
 
-void ff_vp9_fill_mv(VP9TileData *td, VP56mv *mv, int mode, int sb)
+void ff_vp9_fill_mv(VP9Context *s, VP56mv *mv, int mode, int sb)
 {
-    VP9Context *s = td->s;
-    VP9Block *b = td->b;
+    VP9Block *b = s->b;
 
     if (mode == ZEROMV) {
         AV_ZERO64(mv);
@@ -299,7 +296,7 @@ void ff_vp9_fill_mv(VP9TileData *td, VP56mv *mv, int mode, int sb)
         int hp;
 
         // FIXME cache this value and reuse for other subblocks
-        find_ref_mvs(td, &mv[0], b->ref[0], 0, mode == NEARMV,
+        find_ref_mvs(s, &mv[0], b->ref[0], 0, mode == NEARMV,
                      mode == NEWMV ? -1 : sb);
         // FIXME maybe move this code into find_ref_mvs()
         if ((mode == NEWMV || sb == -1) &&
@@ -319,19 +316,19 @@ void ff_vp9_fill_mv(VP9TileData *td, VP56mv *mv, int mode, int sb)
             }
         }
         if (mode == NEWMV) {
-            enum MVJoint j = vp8_rac_get_tree(td->c, ff_vp9_mv_joint_tree,
+            enum MVJoint j = vp8_rac_get_tree(&s->c, ff_vp9_mv_joint_tree,
                                               s->prob.p.mv_joint);
 
-            td->counts.mv_joint[j]++;
+            s->counts.mv_joint[j]++;
             if (j >= MV_JOINT_V)
-                mv[0].y += read_mv_component(td, 0, hp);
+                mv[0].y += read_mv_component(s, 0, hp);
             if (j & 1)
-                mv[0].x += read_mv_component(td, 1, hp);
+                mv[0].x += read_mv_component(s, 1, hp);
         }
 
         if (b->comp) {
             // FIXME cache this value and reuse for other subblocks
-            find_ref_mvs(td, &mv[1], b->ref[1], 1, mode == NEARMV,
+            find_ref_mvs(s, &mv[1], b->ref[1], 1, mode == NEARMV,
                          mode == NEWMV ? -1 : sb);
             if ((mode == NEWMV || sb == -1) &&
                 !(hp = s->s.h.highprecisionmvs &&
@@ -350,14 +347,14 @@ void ff_vp9_fill_mv(VP9TileData *td, VP56mv *mv, int mode, int sb)
                 }
             }
             if (mode == NEWMV) {
-                enum MVJoint j = vp8_rac_get_tree(td->c, ff_vp9_mv_joint_tree,
+                enum MVJoint j = vp8_rac_get_tree(&s->c, ff_vp9_mv_joint_tree,
                                                   s->prob.p.mv_joint);
 
-                td->counts.mv_joint[j]++;
+                s->counts.mv_joint[j]++;
                 if (j >= MV_JOINT_V)
-                    mv[1].y += read_mv_component(td, 0, hp);
+                    mv[1].y += read_mv_component(s, 0, hp);
                 if (j & 1)
-                    mv[1].x += read_mv_component(td, 1, hp);
+                    mv[1].x += read_mv_component(s, 1, hp);
             }
         }
     }

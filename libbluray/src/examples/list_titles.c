@@ -17,7 +17,7 @@
  * <http://www.gnu.org/licenses/>.
  */
 
-#include "bluray.h"
+#include "libbluray/bluray.h"
 
 #include <stdio.h>
 #include <stdlib.h>

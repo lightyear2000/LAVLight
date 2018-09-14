@@ -27,10 +27,8 @@
 #include "libavutil/internal.h"
 #include "libavutil/opt.h"
 #include "libavutil/qsort.h"
+#include "dualinput.h"
 #include "avfilter.h"
-#include "filters.h"
-#include "framesync.h"
-#include "internal.h"
 
 enum dithering_mode {
     DITHERING_NONE,
@@ -82,7 +80,7 @@ typedef int (*set_frame_func)(struct PaletteUseContext *s, AVFrame *out, AVFrame
 
 typedef struct PaletteUseContext {
     const AVClass *class;
-    FFFrameSync fs;
+    FFDualInputContext dinput;
     struct cache_node cache[CACHE_SIZE];    /* lookup cache */
     struct color_node map[AVPALETTE_COUNT]; /* 3D-Tree (KD-Tree with K=3) for reverse colormap */
     uint32_t palette[AVPALETTE_COUNT];
@@ -130,8 +128,6 @@ static const AVOption paletteuse_options[] = {
 };
 
 AVFILTER_DEFINE_CLASS(paletteuse);
-
-static int load_apply_palette(FFFrameSync *fs);
 
 static int query_formats(AVFilterContext *ctx)
 {
@@ -904,18 +900,11 @@ static int config_output(AVFilterLink *outlink)
     AVFilterContext *ctx = outlink->src;
     PaletteUseContext *s = ctx->priv;
 
-    ret = ff_framesync_init_dualinput(&s->fs, ctx);
-    if (ret < 0)
-        return ret;
-    s->fs.opt_repeatlast = 1; // only 1 frame in the palette
-    s->fs.in[1].before = s->fs.in[1].after = EXT_INFINITY;
-    s->fs.on_event = load_apply_palette;
-
     outlink->w = ctx->inputs[0]->w;
     outlink->h = ctx->inputs[0]->h;
 
     outlink->time_base = ctx->inputs[0]->time_base;
-    if ((ret = ff_framesync_configure(&s->fs)) < 0)
+    if ((ret = ff_dualinput_init(ctx, &s->dinput)) < 0)
         return ret;
     return 0;
 }
@@ -962,32 +951,21 @@ static void load_palette(PaletteUseContext *s, const AVFrame *palette_frame)
         s->palette_loaded = 1;
 }
 
-static int load_apply_palette(FFFrameSync *fs)
+static AVFrame *load_apply_palette(AVFilterContext *ctx, AVFrame *main,
+                                   const AVFrame *second)
 {
-    AVFilterContext *ctx = fs->parent;
     AVFilterLink *inlink = ctx->inputs[0];
     PaletteUseContext *s = ctx->priv;
-    AVFrame *main, *second, *out;
-    int ret;
-
-    // writable for error diffusal dithering
-    ret = ff_framesync_dualinput_get_writable(fs, &main, &second);
-    if (ret < 0)
-        return ret;
-    if (!main || !second) {
-        ret = AVERROR_BUG;
-        goto error;
-    }
     if (!s->palette_loaded) {
         load_palette(s, second);
     }
-    out = apply_palette(inlink, main);
-    return ff_filter_frame(ctx->outputs[0], out);
+    return apply_palette(inlink, main);
+}
 
-error:
-    av_frame_free(&main);
-    av_frame_free(&second);
-    return ret;
+static int filter_frame(AVFilterLink *inlink, AVFrame *in)
+{
+    PaletteUseContext *s = inlink->dst->priv;
+    return ff_dualinput_filter_frame(&s->dinput, inlink, in);
 }
 
 #define DEFINE_SET_FRAME(color_search, name, value)                             \
@@ -1035,6 +1013,9 @@ static int dither_value(int p)
 static av_cold int init(AVFilterContext *ctx)
 {
     PaletteUseContext *s = ctx->priv;
+    s->dinput.repeatlast = 1; // only 1 frame in the palette
+    s->dinput.skip_initial_unpaired = 1;
+    s->dinput.process    = load_apply_palette;
 
     s->set_frame = set_frame_lut[s->color_search_method][s->dither];
 
@@ -1049,10 +1030,10 @@ static av_cold int init(AVFilterContext *ctx)
     return 0;
 }
 
-static int activate(AVFilterContext *ctx)
+static int request_frame(AVFilterLink *outlink)
 {
-    PaletteUseContext *s = ctx->priv;
-    return ff_framesync_activate(&s->fs);
+    PaletteUseContext *s = outlink->src->priv;
+    return ff_dualinput_request_frame(&s->dinput, outlink);
 }
 
 static av_cold void uninit(AVFilterContext *ctx)
@@ -1060,7 +1041,7 @@ static av_cold void uninit(AVFilterContext *ctx)
     int i;
     PaletteUseContext *s = ctx->priv;
 
-    ff_framesync_uninit(&s->fs);
+    ff_dualinput_uninit(&s->dinput);
     for (i = 0; i < CACHE_SIZE; i++)
         av_freep(&s->cache[i].entries);
     av_frame_free(&s->last_in);
@@ -1071,10 +1052,13 @@ static const AVFilterPad paletteuse_inputs[] = {
     {
         .name           = "default",
         .type           = AVMEDIA_TYPE_VIDEO,
+        .filter_frame   = filter_frame,
+        .needs_writable = 1, // for error diffusal dithering
     },{
         .name           = "palette",
         .type           = AVMEDIA_TYPE_VIDEO,
         .config_props   = config_input_palette,
+        .filter_frame   = filter_frame,
     },
     { NULL }
 };
@@ -1084,6 +1068,7 @@ static const AVFilterPad paletteuse_outputs[] = {
         .name          = "default",
         .type          = AVMEDIA_TYPE_VIDEO,
         .config_props  = config_output,
+        .request_frame = request_frame,
     },
     { NULL }
 };
@@ -1095,7 +1080,6 @@ AVFilter ff_vf_paletteuse = {
     .query_formats = query_formats,
     .init          = init,
     .uninit        = uninit,
-    .activate      = activate,
     .inputs        = paletteuse_inputs,
     .outputs       = paletteuse_outputs,
     .priv_class    = &paletteuse_class,

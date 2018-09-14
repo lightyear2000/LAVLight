@@ -34,47 +34,38 @@
 static SoftFloat sbr_sum_square_c(int (*x)[2], int n)
 {
     SoftFloat ret;
-    uint64_t accu, round;
-    uint64_t accu0 = 0, accu1 = 0, accu2 = 0, accu3 = 0;
-    int i, nz, nz0;
+    uint64_t accu = 0, round;
+    int i, nz;
     unsigned u;
 
     for (i = 0; i < n; i += 2) {
         // Larger values are inavlid and could cause overflows of accu.
-        av_assert2(FFABS(x[i + 0][0]) >> 30 == 0);
-        accu0 += (int64_t)x[i + 0][0] * x[i + 0][0];
-        av_assert2(FFABS(x[i + 0][1]) >> 30 == 0);
-        accu1 += (int64_t)x[i + 0][1] * x[i + 0][1];
-        av_assert2(FFABS(x[i + 1][0]) >> 30 == 0);
-        accu2 += (int64_t)x[i + 1][0] * x[i + 1][0];
-        av_assert2(FFABS(x[i + 1][1]) >> 30 == 0);
-        accu3 += (int64_t)x[i + 1][1] * x[i + 1][1];
+        av_assert2(FFABS(x[i + 0][0]) >> 29 == 0);
+        accu += (int64_t)x[i + 0][0] * x[i + 0][0];
+        av_assert2(FFABS(x[i + 0][1]) >> 29 == 0);
+        accu += (int64_t)x[i + 0][1] * x[i + 0][1];
+        av_assert2(FFABS(x[i + 1][0]) >> 29 == 0);
+        accu += (int64_t)x[i + 1][0] * x[i + 1][0];
+        av_assert2(FFABS(x[i + 1][1]) >> 29 == 0);
+        accu += (int64_t)x[i + 1][1] * x[i + 1][1];
     }
-
-    nz0 = 15;
-    while ((accu0|accu1|accu2|accu3) >> 62) {
-        accu0 >>= 1;
-        accu1 >>= 1;
-        accu2 >>= 1;
-        accu3 >>= 1;
-        nz0 --;
-    }
-    accu = accu0 + accu1 + accu2 + accu3;
 
     u = accu >> 32;
-    if (u) {
-        nz = 33;
+    if (u == 0) {
+        nz = 1;
+    } else {
+        nz = -1;
         while (u < 0x80000000U) {
             u <<= 1;
-            nz--;
+            nz++;
         }
-    } else
-        nz = 1;
+        nz = 32 - nz;
+    }
 
     round = 1ULL << (nz-1);
     u = ((accu + round) >> nz);
     u >>= 1;
-    ret = av_int2sf(u, nz0 - nz);
+    ret = av_int2sf(u, 15 - nz);
 
     return ret;
 }
@@ -147,19 +138,19 @@ static av_always_inline void autocorrelate(const int x[40][2], SoftFloat phi[3][
 
     if (lag) {
         for (i = 1; i < 38; i++) {
-            accu_re += (uint64_t)x[i][0] * x[i+lag][0];
-            accu_re += (uint64_t)x[i][1] * x[i+lag][1];
-            accu_im += (uint64_t)x[i][0] * x[i+lag][1];
-            accu_im -= (uint64_t)x[i][1] * x[i+lag][0];
+            accu_re += (int64_t)x[i][0] * x[i+lag][0];
+            accu_re += (int64_t)x[i][1] * x[i+lag][1];
+            accu_im += (int64_t)x[i][0] * x[i+lag][1];
+            accu_im -= (int64_t)x[i][1] * x[i+lag][0];
         }
 
         real_sum = accu_re;
         imag_sum = accu_im;
 
-        accu_re += (uint64_t)x[ 0][0] * x[lag][0];
-        accu_re += (uint64_t)x[ 0][1] * x[lag][1];
-        accu_im += (uint64_t)x[ 0][0] * x[lag][1];
-        accu_im -= (uint64_t)x[ 0][1] * x[lag][0];
+        accu_re += (int64_t)x[ 0][0] * x[lag][0];
+        accu_re += (int64_t)x[ 0][1] * x[lag][1];
+        accu_im += (int64_t)x[ 0][0] * x[lag][1];
+        accu_im -= (int64_t)x[ 0][1] * x[lag][0];
 
         phi[2-lag][1][0] = autocorr_calc(accu_re);
         phi[2-lag][1][1] = autocorr_calc(accu_im);
@@ -167,28 +158,28 @@ static av_always_inline void autocorrelate(const int x[40][2], SoftFloat phi[3][
         if (lag == 1) {
             accu_re = real_sum;
             accu_im = imag_sum;
-            accu_re += (uint64_t)x[38][0] * x[39][0];
-            accu_re += (uint64_t)x[38][1] * x[39][1];
-            accu_im += (uint64_t)x[38][0] * x[39][1];
-            accu_im -= (uint64_t)x[38][1] * x[39][0];
+            accu_re += (int64_t)x[38][0] * x[39][0];
+            accu_re += (int64_t)x[38][1] * x[39][1];
+            accu_im += (int64_t)x[38][0] * x[39][1];
+            accu_im -= (int64_t)x[38][1] * x[39][0];
 
             phi[0][0][0] = autocorr_calc(accu_re);
             phi[0][0][1] = autocorr_calc(accu_im);
         }
     } else {
         for (i = 1; i < 38; i++) {
-            accu_re += (uint64_t)x[i][0] * x[i][0];
-            accu_re += (uint64_t)x[i][1] * x[i][1];
+            accu_re += (int64_t)x[i][0] * x[i][0];
+            accu_re += (int64_t)x[i][1] * x[i][1];
         }
         real_sum = accu_re;
-        accu_re += (uint64_t)x[ 0][0] * x[ 0][0];
-        accu_re += (uint64_t)x[ 0][1] * x[ 0][1];
+        accu_re += (int64_t)x[ 0][0] * x[ 0][0];
+        accu_re += (int64_t)x[ 0][1] * x[ 0][1];
 
         phi[2][1][0] = autocorr_calc(accu_re);
 
         accu_re = real_sum;
-        accu_re += (uint64_t)x[38][0] * x[38][0];
-        accu_re += (uint64_t)x[38][1] * x[38][1];
+        accu_re += (int64_t)x[38][0] * x[38][0];
+        accu_re += (int64_t)x[38][1] * x[38][1];
 
         phi[1][0][0] = autocorr_calc(accu_re);
     }
@@ -253,7 +244,7 @@ static void sbr_hf_g_filt_c(int (*Y)[2], const int (*X_high)[40][2],
     }
 }
 
-static av_always_inline int sbr_hf_apply_noise(int (*Y)[2],
+static av_always_inline void sbr_hf_apply_noise(int (*Y)[2],
                                                 const SoftFloat *s_m,
                                                 const SoftFloat *q_filt,
                                                 int noise,
@@ -264,17 +255,14 @@ static av_always_inline int sbr_hf_apply_noise(int (*Y)[2],
     int m;
 
     for (m = 0; m < m_max; m++) {
-        unsigned y0 = Y[m][0];
-        unsigned y1 = Y[m][1];
+        int y0 = Y[m][0];
+        int y1 = Y[m][1];
         noise = (noise + 1) & 0x1ff;
         if (s_m[m].mant) {
             int shift, round;
 
             shift = 22 - s_m[m].exp;
-            if (shift < 1) {
-                av_log(NULL, AV_LOG_ERROR, "Overflow in sbr_hf_apply_noise, shift=%d\n", shift);
-                return AVERROR(ERANGE);
-            } else if (shift < 30) {
+            if (shift < 30) {
                 round = 1 << (shift-1);
                 y0 += (s_m[m].mant * phi_sign0 + round) >> shift;
                 y1 += (s_m[m].mant * phi_sign1 + round) >> shift;
@@ -284,10 +272,7 @@ static av_always_inline int sbr_hf_apply_noise(int (*Y)[2],
             int64_t accu;
 
             shift = 22 - q_filt[m].exp;
-            if (shift < 1) {
-                av_log(NULL, AV_LOG_ERROR, "Overflow in sbr_hf_apply_noise, shift=%d\n", shift);
-                return AVERROR(ERANGE);
-            } else if (shift < 30) {
+            if (shift < 30) {
                 round = 1 << (shift-1);
 
                 accu = (int64_t)q_filt[m].mant * ff_sbr_noise_table_fixed[noise][0];
@@ -303,7 +288,6 @@ static av_always_inline int sbr_hf_apply_noise(int (*Y)[2],
         Y[m][1] = y1;
         phi_sign1 = -phi_sign1;
     }
-    return 0;
 }
 
 #include "sbrdsp_template.c"

@@ -17,10 +17,10 @@
  * <http://www.gnu.org/licenses/>.
  */
 
-#include "bluray.h"
+#include "libbluray/bluray.h"
 
-#include "hdmv/mobj_data.h"
-#include "hdmv/mobj_print.h"
+#include "libbluray/hdmv/mobj_data.h"
+#include "libbluray/hdmv/mobj_print.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -73,14 +73,11 @@ int main(int argc, const char *argv[])
 
     mobj = bd_read_mobj(argv[argc-1]);
 
-    if (!mobj) {
-      fprintf(stderr, "Error loading %s\n", argv[argc-1]);
-      return 1;
+    if (mobj) {
+        _mobj_print(mobj, disasm);
+
+        bd_free_mobj(mobj);
     }
-
-    _mobj_print(mobj, disasm);
-
-    bd_free_mobj(mobj);
 
     return 0;
 }

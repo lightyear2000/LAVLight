@@ -42,9 +42,6 @@ static void encode(AVCodecContext *enc_ctx, AVFrame *frame, AVPacket *pkt,
     int ret;
 
     /* send the frame to the encoder */
-    if (frame)
-        printf("Send frame %3"PRId64"\n", frame->pts);
-
     ret = avcodec_send_frame(enc_ctx, frame);
     if (ret < 0) {
         fprintf(stderr, "Error sending a frame for encoding\n");
@@ -60,7 +57,7 @@ static void encode(AVCodecContext *enc_ctx, AVFrame *frame, AVPacket *pkt,
             exit(1);
         }
 
-        printf("Write packet %3"PRId64" (size=%5d)\n", pkt->pts, pkt->size);
+        printf("Write frame %3"PRId64" (size=%5d)\n", pkt->pts, pkt->size);
         fwrite(pkt->data, 1, pkt->size, outfile);
         av_packet_unref(pkt);
     }
@@ -89,7 +86,7 @@ int main(int argc, char **argv)
     /* find the mpeg1video encoder */
     codec = avcodec_find_encoder_by_name(codec_name);
     if (!codec) {
-        fprintf(stderr, "Codec '%s' not found\n", codec_name);
+        fprintf(stderr, "Codec not found\n");
         exit(1);
     }
 
@@ -126,9 +123,8 @@ int main(int argc, char **argv)
         av_opt_set(c->priv_data, "preset", "slow", 0);
 
     /* open it */
-    ret = avcodec_open2(c, codec, NULL);
-    if (ret < 0) {
-        fprintf(stderr, "Could not open codec: %s\n", av_err2str(ret));
+    if (avcodec_open2(c, codec, NULL) < 0) {
+        fprintf(stderr, "Could not open codec\n");
         exit(1);
     }
 

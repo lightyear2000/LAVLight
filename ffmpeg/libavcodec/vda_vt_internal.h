@@ -59,5 +59,4 @@ int ff_videotoolbox_h264_decode_slice(AVCodecContext *avctx,
                                       const uint8_t *buffer,
                                       uint32_t size);
 CFDataRef ff_videotoolbox_avcc_extradata_create(AVCodecContext *avctx);
-CFDataRef ff_videotoolbox_hvcc_extradata_create(AVCodecContext *avctx);
 #endif /* AVCODEC_VDA_VT_INTERNAL_H */

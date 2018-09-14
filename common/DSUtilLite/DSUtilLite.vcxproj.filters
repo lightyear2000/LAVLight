@@ -84,9 +84,6 @@
     <ClInclude Include="DSMResourceBag.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="MediaSampleSideData.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="stdafx.cpp">
@@ -135,9 +132,6 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="DSMResourceBag.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="MediaSampleSideData.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

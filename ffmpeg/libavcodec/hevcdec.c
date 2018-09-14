@@ -139,7 +139,7 @@ fail:
     return AVERROR(ENOMEM);
 }
 
-static int pred_weight_table(HEVCContext *s, GetBitContext *gb)
+static void pred_weight_table(HEVCContext *s, GetBitContext *gb)
 {
     int i = 0;
     int j = 0;
@@ -182,12 +182,6 @@ static int pred_weight_table(HEVCContext *s, GetBitContext *gb)
             for (j = 0; j < 2; j++) {
                 int delta_chroma_weight_l0 = get_se_golomb(gb);
                 int delta_chroma_offset_l0 = get_se_golomb(gb);
-
-                if (   (int8_t)delta_chroma_weight_l0 != delta_chroma_weight_l0
-                    || delta_chroma_offset_l0 < -(1<<17) || delta_chroma_offset_l0 > (1<<17)) {
-                    return AVERROR_INVALIDDATA;
-                }
-
                 s->sh.chroma_weight_l0[i][j] = (1 << s->sh.chroma_log2_weight_denom) + delta_chroma_weight_l0;
                 s->sh.chroma_offset_l0[i][j] = av_clip((delta_chroma_offset_l0 - ((128 * s->sh.chroma_weight_l0[i][j])
                                                                                     >> s->sh.chroma_log2_weight_denom) + 128), -128, 127);
@@ -224,12 +218,6 @@ static int pred_weight_table(HEVCContext *s, GetBitContext *gb)
                 for (j = 0; j < 2; j++) {
                     int delta_chroma_weight_l1 = get_se_golomb(gb);
                     int delta_chroma_offset_l1 = get_se_golomb(gb);
-
-                    if (   (int8_t)delta_chroma_weight_l1 != delta_chroma_weight_l1
-                        || delta_chroma_offset_l1 < -(1<<17) || delta_chroma_offset_l1 > (1<<17)) {
-                        return AVERROR_INVALIDDATA;
-                    }
-
                     s->sh.chroma_weight_l1[i][j] = (1 << s->sh.chroma_log2_weight_denom) + delta_chroma_weight_l1;
                     s->sh.chroma_offset_l1[i][j] = av_clip((delta_chroma_offset_l1 - ((128 * s->sh.chroma_weight_l1[i][j])
                                                                                         >> s->sh.chroma_log2_weight_denom) + 128), -128, 127);
@@ -242,7 +230,6 @@ static int pred_weight_table(HEVCContext *s, GetBitContext *gb)
             }
         }
     }
-    return 0;
 }
 
 static int decode_lt_rps(HEVCContext *s, LongTermRPS *rps, GetBitContext *gb)
@@ -261,8 +248,6 @@ static int decode_lt_rps(HEVCContext *s, LongTermRPS *rps, GetBitContext *gb)
         nb_sps = get_ue_golomb_long(gb);
     nb_sh = get_ue_golomb_long(gb);
 
-    if (nb_sps > sps->num_long_term_ref_pics_sps)
-        return AVERROR_INVALIDDATA;
     if (nb_sh + (uint64_t)nb_sps > FF_ARRAY_ELEMS(rps->poc))
         return AVERROR_INVALIDDATA;
 
@@ -286,16 +271,12 @@ static int decode_lt_rps(HEVCContext *s, LongTermRPS *rps, GetBitContext *gb)
 
         delta_poc_msb_present = get_bits1(gb);
         if (delta_poc_msb_present) {
-            int64_t delta = get_ue_golomb_long(gb);
-            int64_t poc;
+            int delta = get_ue_golomb_long(gb);
 
             if (i && i != nb_sps)
                 delta += prev_delta_msb;
 
-            poc = rps->poc[i] + s->poc - delta * max_poc_lsb - s->sh.pic_order_cnt_lsb;
-            if (poc != (int32_t)poc)
-                return AVERROR_INVALIDDATA;
-            rps->poc[i] = poc;
+            rps->poc[i] += s->poc - delta * max_poc_lsb - s->sh.pic_order_cnt_lsb;
             prev_delta_msb = delta;
         }
     }
@@ -352,11 +333,7 @@ static void export_stream_params(AVCodecContext *avctx, const HEVCParamSets *ps,
 
 static enum AVPixelFormat get_format(HEVCContext *s, const HEVCSPS *sps)
 {
-#define HWACCEL_MAX (CONFIG_HEVC_DXVA2_HWACCEL + \
-                     CONFIG_HEVC_D3D11VA_HWACCEL * 2 + \
-                     CONFIG_HEVC_VAAPI_HWACCEL + \
-                     CONFIG_HEVC_VIDEOTOOLBOX_HWACCEL + \
-                     CONFIG_HEVC_VDPAU_HWACCEL)
+    #define HWACCEL_MAX (CONFIG_HEVC_DXVA2_HWACCEL + CONFIG_HEVC_D3D11VA_HWACCEL + CONFIG_HEVC_VAAPI_HWACCEL + CONFIG_HEVC_VDPAU_HWACCEL)
     enum AVPixelFormat pix_fmts[HWACCEL_MAX + 2], *fmt = pix_fmts;
 
     switch (sps->pix_fmt) {
@@ -367,16 +344,12 @@ static enum AVPixelFormat get_format(HEVCContext *s, const HEVCSPS *sps)
 #endif
 #if CONFIG_HEVC_D3D11VA_HWACCEL
         *fmt++ = AV_PIX_FMT_D3D11VA_VLD;
-        *fmt++ = AV_PIX_FMT_D3D11;
 #endif
 #if CONFIG_HEVC_VAAPI_HWACCEL
         *fmt++ = AV_PIX_FMT_VAAPI;
 #endif
 #if CONFIG_HEVC_VDPAU_HWACCEL
         *fmt++ = AV_PIX_FMT_VDPAU;
-#endif
-#if CONFIG_HEVC_VIDEOTOOLBOX_HWACCEL
-        *fmt++ = AV_PIX_FMT_VIDEOTOOLBOX;
 #endif
         break;
     case AV_PIX_FMT_YUV420P10:
@@ -385,13 +358,9 @@ static enum AVPixelFormat get_format(HEVCContext *s, const HEVCSPS *sps)
 #endif
 #if CONFIG_HEVC_D3D11VA_HWACCEL
         *fmt++ = AV_PIX_FMT_D3D11VA_VLD;
-        *fmt++ = AV_PIX_FMT_D3D11;
 #endif
 #if CONFIG_HEVC_VAAPI_HWACCEL
         *fmt++ = AV_PIX_FMT_VAAPI;
-#endif
-#if CONFIG_HEVC_VIDEOTOOLBOX_HWACCEL
-        *fmt++ = AV_PIX_FMT_VIDEOTOOLBOX;
 #endif
         break;
     }
@@ -715,9 +684,7 @@ static int hls_slice_header(HEVCContext *s)
 
             if ((s->ps.pps->weighted_pred_flag   && sh->slice_type == HEVC_SLICE_P) ||
                 (s->ps.pps->weighted_bipred_flag && sh->slice_type == HEVC_SLICE_B)) {
-                int ret = pred_weight_table(s, gb);
-                if (ret < 0)
-                    return ret;
+                pred_weight_table(s, gb);
             }
 
             sh->max_num_merge_cand = 5 - get_ue_golomb_long(gb);
@@ -753,17 +720,8 @@ static int hls_slice_header(HEVCContext *s)
             if (deblocking_filter_override_flag) {
                 sh->disable_deblocking_filter_flag = get_bits1(gb);
                 if (!sh->disable_deblocking_filter_flag) {
-                    int beta_offset_div2 = get_se_golomb(gb);
-                    int tc_offset_div2   = get_se_golomb(gb) ;
-                    if (beta_offset_div2 < -6 || beta_offset_div2 > 6 ||
-                        tc_offset_div2   < -6 || tc_offset_div2   > 6) {
-                        av_log(s->avctx, AV_LOG_ERROR,
-                            "Invalid deblock filter offsets: %d, %d\n",
-                            beta_offset_div2, tc_offset_div2);
-                        return AVERROR_INVALIDDATA;
-                    }
-                    sh->beta_offset = beta_offset_div2 * 2;
-                    sh->tc_offset   =   tc_offset_div2 * 2;
+                    sh->beta_offset = get_se_golomb(gb) * 2;
+                    sh->tc_offset   = get_se_golomb(gb) * 2;
                 }
             } else {
                 sh->disable_deblocking_filter_flag = s->ps.pps->disable_dbf;
@@ -1694,11 +1652,10 @@ static void chroma_mc_bi(HEVCContext *s, uint8_t *dst0, ptrdiff_t dststride, AVF
 static void hevc_await_progress(HEVCContext *s, HEVCFrame *ref,
                                 const Mv *mv, int y0, int height)
 {
-    if (s->threads_type == FF_THREAD_FRAME ) {
-        int y = FFMAX(0, (mv->y >> 2) + y0 + height + 9);
+    int y = FFMAX(0, (mv->y >> 2) + y0 + height + 9);
 
+    if (s->threads_type == FF_THREAD_FRAME )
         ff_thread_await_progress(&ref->tf, y, 0);
-    }
 }
 
 static void hevc_luma_mv_mvp_mode(HEVCContext *s, int x0, int y0, int nPbW,
@@ -2365,7 +2322,6 @@ static int hls_decode_entry(AVCodecContext *avctxt, void *isFilterThread)
     int x_ctb       = 0;
     int y_ctb       = 0;
     int ctb_addr_ts = s->ps.pps->ctb_addr_rs_to_ts[s->sh.slice_ctb_addr_rs];
-    int ret;
 
     if (!ctb_addr_ts && s->sh.dependent_slice_segment_flag) {
         av_log(s->avctx, AV_LOG_ERROR, "Impossible initial tile.\n");
@@ -2387,11 +2343,7 @@ static int hls_decode_entry(AVCodecContext *avctxt, void *isFilterThread)
         y_ctb = (ctb_addr_rs / ((s->ps.sps->width + ctb_size - 1) >> s->ps.sps->log2_ctb_size)) << s->ps.sps->log2_ctb_size;
         hls_decode_neighbour(s, x_ctb, y_ctb, ctb_addr_ts);
 
-        ret = ff_hevc_cabac_init(s, ctb_addr_ts);
-        if (ret < 0) {
-            s->tab_slice_address[ctb_addr_rs] = -1;
-            return ret;
-        }
+        ff_hevc_cabac_init(s, ctb_addr_ts);
 
         hls_sao_param(s, x_ctb >> s->ps.sps->log2_ctb_size, y_ctb >> s->ps.sps->log2_ctb_size);
 
@@ -2447,8 +2399,9 @@ static int hls_decode_entry_wpp(AVCodecContext *avctxt, void *input_ctb_row, int
 
     if(ctb_row) {
         ret = init_get_bits8(&lc->gb, s->data + s->sh.offset[ctb_row - 1], s->sh.size[ctb_row - 1]);
+
         if (ret < 0)
-            goto error;
+            return ret;
         ff_init_cabac_decoder(&lc->cc, s->data + s->sh.offset[(ctb_row)-1], s->sh.size[ctb_row - 1]);
     }
 
@@ -2465,15 +2418,15 @@ static int hls_decode_entry_wpp(AVCodecContext *avctxt, void *input_ctb_row, int
             return 0;
         }
 
-        ret = ff_hevc_cabac_init(s, ctb_addr_ts);
-        if (ret < 0)
-            goto error;
+        ff_hevc_cabac_init(s, ctb_addr_ts);
         hls_sao_param(s, x_ctb >> s->ps.sps->log2_ctb_size, y_ctb >> s->ps.sps->log2_ctb_size);
         more_data = hls_coding_quadtree(s, x_ctb, y_ctb, s->ps.sps->log2_ctb_size, 0);
 
         if (more_data < 0) {
-            ret = more_data;
-            goto error;
+            s->tab_slice_address[ctb_addr_rs] = -1;
+            atomic_store(&s1->wpp_err, 1);
+            ff_thread_report_progress2(s->avctx, ctb_row ,thread, SHIFT_CTB_WPP);
+            return more_data;
         }
 
         ctb_addr_ts++;
@@ -2503,11 +2456,6 @@ static int hls_decode_entry_wpp(AVCodecContext *avctxt, void *input_ctb_row, int
     ff_thread_report_progress2(s->avctx, ctb_row ,thread, SHIFT_CTB_WPP);
 
     return 0;
-error:
-    s->tab_slice_address[ctb_addr_rs] = -1;
-    atomic_store(&s1->wpp_err, 1);
-    ff_thread_report_progress2(s->avctx, ctb_row ,thread, SHIFT_CTB_WPP);
-    return ret;
 }
 
 static int hls_slice_data_wpp(HEVCContext *s, const H2645NAL *nal)
@@ -2734,12 +2682,6 @@ static int set_side_data(HEVCContext *s)
         av_freep(&s->sei.a53_caption.a53_caption);
         s->sei.a53_caption.a53_caption_size = 0;
         s->avctx->properties |= FF_CODEC_PROPERTY_CLOSED_CAPTIONS;
-    }
-
-    if (s->sei.alternative_transfer.present &&
-        av_color_transfer_name(s->sei.alternative_transfer.preferred_transfer_characteristics) &&
-        s->sei.alternative_transfer.preferred_transfer_characteristics != AVCOL_TRC_UNSPECIFIED) {
-        s->avctx->color_trc = out->color_trc = s->sei.alternative_transfer.preferred_transfer_characteristics;
     }
 
     return 0;
@@ -3068,7 +3010,7 @@ static int verify_md5(HEVCContext *s, AVFrame *frame)
     return 0;
 }
 
-static int hevc_decode_extradata(HEVCContext *s, uint8_t *buf, int length, int first)
+static int hevc_decode_extradata(HEVCContext *s, uint8_t *buf, int length)
 {
     int ret, i;
 
@@ -3080,7 +3022,7 @@ static int hevc_decode_extradata(HEVCContext *s, uint8_t *buf, int length, int f
 
     /* export stream parameters from the first SPS */
     for (i = 0; i < FF_ARRAY_ELEMS(s->ps.sps_list); i++) {
-        if (first && s->ps.sps_list[i]) {
+        if (s->ps.sps_list[i]) {
             const HEVCSPS *sps = (const HEVCSPS*)s->ps.sps_list[i]->data;
             export_stream_params(s->avctx, &s->ps, sps);
             break;
@@ -3110,7 +3052,7 @@ static int hevc_decode_frame(AVCodecContext *avctx, void *data, int *got_output,
     new_extradata = av_packet_get_side_data(avpkt, AV_PKT_DATA_NEW_EXTRADATA,
                                             &new_extradata_size);
     if (new_extradata && new_extradata_size > 0) {
-        ret = hevc_decode_extradata(s, new_extradata, new_extradata_size, 0);
+        ret = hevc_decode_extradata(s, new_extradata, new_extradata_size);
         if (ret < 0)
             return ret;
     }
@@ -3366,12 +3308,6 @@ static int hevc_update_thread_context(AVCodecContext *dst,
         s->max_ra = INT_MAX;
     }
 
-    s->sei.frame_packing        = s0->sei.frame_packing;
-    s->sei.display_orientation  = s0->sei.display_orientation;
-    s->sei.mastering_display    = s0->sei.mastering_display;
-    s->sei.content_light        = s0->sei.content_light;
-    s->sei.alternative_transfer = s0->sei.alternative_transfer;
-
     return 0;
 }
 
@@ -3398,7 +3334,7 @@ static av_cold int hevc_decode_init(AVCodecContext *avctx)
         s->threads_number = 1;
 
     if (avctx->extradata_size > 0 && avctx->extradata) {
-        ret = hevc_decode_extradata(s, avctx->extradata, avctx->extradata_size, 1);
+        ret = hevc_decode_extradata(s, avctx->extradata, avctx->extradata_size);
         if (ret < 0) {
             s->is_nalff = 0;
             av_log(avctx, AV_LOG_ERROR, "Invalid extradata ignored\n");

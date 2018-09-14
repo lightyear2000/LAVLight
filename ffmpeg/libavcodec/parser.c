@@ -285,8 +285,6 @@ int ff_combine_frame(ParseContext *pc, int next,
         return -1;
     }
 
-    av_assert0(next >= 0 || pc->buffer);
-
     *buf_size          =
     pc->overread_index = pc->index + next;
 

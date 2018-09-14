@@ -30,6 +30,11 @@
 
 #define AMP_MAX     56
 
+enum LBRHeader {
+    LBR_HEADER_SYNC_ONLY    = 1,
+    LBR_HEADER_DECODER_INIT = 2
+};
+
 enum LBRFlags {
     LBR_FLAG_24_BIT             = 0x01,
     LBR_FLAG_LFE_PRESENT        = 0x02,
@@ -1166,13 +1171,13 @@ int ff_dca_lbr_parse(DCALbrDecoder *s, uint8_t *data, DCAExssAsset *asset)
 
     // LBR header type
     switch (bytestream2_get_byte(&gb)) {
-    case DCA_LBR_HEADER_SYNC_ONLY:
+    case LBR_HEADER_SYNC_ONLY:
         if (!s->sample_rate) {
             av_log(s->avctx, AV_LOG_ERROR, "LBR decoder not initialized\n");
             return AVERROR_INVALIDDATA;
         }
         break;
-    case DCA_LBR_HEADER_DECODER_INIT:
+    case LBR_HEADER_DECODER_INIT:
         if ((ret = parse_decoder_init(s, &gb)) < 0) {
             s->sample_rate = 0;
             return ret;

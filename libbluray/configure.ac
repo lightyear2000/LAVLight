@@ -1,7 +1,7 @@
 dnl library version number
 m4_define([bluray_major], 1)
 m4_define([bluray_minor], 0)
-m4_define([bluray_micro], 1)
+m4_define([bluray_micro], 0)
 m4_define([bluray_version],[bluray_major.bluray_minor.bluray_micro])
 
 dnl shared library version (.so version)
@@ -13,7 +13,7 @@ dnl
 dnl Library file name will be libbluray.so.(current-age).age.revision
 dnl
 m4_define([lt_current],  2)
-m4_define([lt_revision], 1)
+m4_define([lt_revision], 0)
 m4_define([lt_age],      0)
 
 dnl initilization
@@ -227,9 +227,9 @@ if [[ $use_bdjava = "yes" ]]; then
     CPPFLAGS="$BDJAVA_CFLAGS $CPPFLAGS"
     AC_CHECK_HEADERS([jni.h], [], [AC_MSG_ERROR(could not find jni.h)])
     CPPFLAGS="$temp_CPPFLAGS"
-], [
+  ], [
     BDJAVA_CFLAGS='-I${abs_top_srcdir}/jni -I${abs_top_srcdir}/jni/'"${java_os}"
-])
+  ])
 
   AC_CHECK_PROG(HAVE_ANT, [ant], yes, no)
   if test "x$use_bdjava_jar" = "xyes" && test "x$HAVE_ANT" = "xno"; then

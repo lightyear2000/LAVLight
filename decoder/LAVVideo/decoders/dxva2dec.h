@@ -26,6 +26,7 @@
 
 #define DXVA2_MAX_SURFACES 64
 #define DXVA2_QUEUE_SURFACES 4
+#define DXVA2_SURFACE_BASE_ALIGN 16
 
 typedef HRESULT WINAPI pDirect3DCreate9Ex(UINT, IDirect3D9Ex **);
 typedef HRESULT WINAPI pCreateDeviceManager9(UINT *pResetToken, IDirect3DDeviceManager9 **);
@@ -53,7 +54,7 @@ public:
 
   STDMETHODIMP InitAllocator(IMemAllocator **ppAlloc);
   STDMETHODIMP PostConnect(IPin *pPin);
-  STDMETHODIMP_(long) GetBufferCount(long *pMaxBuffers = nullptr);
+  STDMETHODIMP_(long) GetBufferCount();
   STDMETHODIMP_(const WCHAR*) GetDecoderName() { return m_bNative ? L"dxva2n" : (m_bDirect ? L"dxva2cb direct" : L"dxva2cb"); }
   STDMETHODIMP HasThreadSafeBuffers() { return m_bNative ? S_FALSE : S_OK; }
   STDMETHODIMP SetDirectOutput(BOOL bDirect) { m_bDirect = bDirect; return S_OK; }
@@ -85,7 +86,7 @@ private:
 
   HRESULT CreateD3DDeviceManager(IDirect3DDevice9 *pDevice, UINT *pReset, IDirect3DDeviceManager9 **ppManager);
   HRESULT CreateDXVAVideoService(IDirect3DDeviceManager9 *pManager, IDirectXVideoDecoderService **ppService);
-  HRESULT FindVideoServiceConversion(AVCodecID codec, int profile, GUID *input, D3DFORMAT *output);
+  HRESULT FindVideoServiceConversion(AVCodecID codec, bool bHighBitdepth, GUID *input, D3DFORMAT *output);
   HRESULT FindDecoderConfiguration(const GUID &input, const DXVA2_VideoDesc *pDesc, DXVA2_ConfigPictureDecode *pConfig);
 
   HRESULT CreateDXVA2Decoder(int nSurfaces = 0, IDirect3DSurface9 **ppSurfaces = nullptr);
@@ -103,6 +104,8 @@ private:
 
   STDMETHODIMP FlushDisplayQueue(BOOL bDeliver);
   STDMETHODIMP FlushFromAllocator();
+
+  DWORD GetAlignedDimension(DWORD dim);
 
 private:
   friend class CDXVA2SurfaceAllocator;

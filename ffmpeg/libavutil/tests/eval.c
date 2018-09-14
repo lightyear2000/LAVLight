@@ -16,13 +16,12 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#include "libavutil/timer.h"
-
 #include <math.h>
 #include <stdio.h>
 #include <string.h>
 
 #include "libavutil/libm.h"
+#include "libavutil/timer.h"
 #include "libavutil/eval.h"
 
 static const double const_values[] = {

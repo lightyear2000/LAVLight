@@ -468,16 +468,6 @@ static int init_pts(AVFormatContext *s)
     return 0;
 }
 
-static void flush_if_needed(AVFormatContext *s)
-{
-    if (s->pb && s->pb->error >= 0) {
-        if (s->flush_packets == 1 || s->flags & AVFMT_FLAG_FLUSH_PACKETS)
-            avio_flush(s->pb);
-        else if (s->flush_packets && !(s->oformat->flags & AVFMT_NOFILE))
-            avio_write_marker(s->pb, AV_NOPTS_VALUE, AVIO_DATA_MARKER_FLUSH_POINT);
-    }
-}
-
 static int write_header_internal(AVFormatContext *s)
 {
     if (!(s->oformat->flags & AVFMT_NOFILE) && s->pb)
@@ -489,7 +479,8 @@ static int write_header_internal(AVFormatContext *s)
         s->internal->write_header_ret = ret;
         if (ret < 0)
             return ret;
-        flush_if_needed(s);
+        if (s->flush_packets && s->pb && s->pb->error >= 0 && s->flags & AVFMT_FLAG_FLUSH_PACKETS)
+            avio_flush(s->pb);
     }
     s->internal->header_written = 1;
     if (!(s->oformat->flags & AVFMT_NOFILE) && s->pb)
@@ -781,7 +772,8 @@ FF_ENABLE_DEPRECATION_WARNINGS
     }
 
     if (s->pb && ret >= 0) {
-        flush_if_needed(s);
+        if (s->flush_packets && s->flags & AVFMT_FLAG_FLUSH_PACKETS)
+            avio_flush(s->pb);
         if (s->pb->error < 0)
             ret = s->pb->error;
     }
@@ -940,7 +932,8 @@ int av_write_frame(AVFormatContext *s, AVPacket *pkt)
                     return ret;
             }
             ret = s->oformat->write_packet(s, NULL);
-            flush_if_needed(s);
+            if (s->flush_packets && s->pb && s->pb->error >= 0 && s->flags & AVFMT_FLAG_FLUSH_PACKETS)
+                avio_flush(s->pb);
             if (ret >= 0 && s->pb && s->pb->error < 0)
                 ret = s->pb->error;
             return ret;

@@ -381,9 +381,8 @@ static float ppp_pvq_search_c(float *X, int *y, int K, int N)
     }
 
     while (K) {
-        int max_idx = 0, phase = FFSIGN(K);
+        int max_idx = 0, max_den = 1, phase = FFSIGN(K);
         float max_num = 0.0f;
-        float max_den = 1.0f;
         y_norm += 1.0f;
 
         for (i = 0; i < N; i++) {
@@ -947,9 +946,6 @@ int av_cold ff_celt_pvq_init(CeltPVQ **pvq)
     s->decode_band        = pvq_decode_band;
     s->encode_band        = pvq_encode_band;
     s->band_cost          = pvq_band_cost;
-
-    if (ARCH_X86)
-        ff_opus_dsp_init_x86(s);
 
     *pvq = s;
 

@@ -53,9 +53,9 @@
 #define AV_CODEC_ID_PCM_UxxLE (AVCodecID)0x19004
 #define AV_CODEC_ID_PCM_QTRAW (AVCodecID)0x19005
 
-#define LAVC_AUDIO_REGISTRY_KEY L"Software\\LAVLight\\Audio"
-#define LAVC_AUDIO_REGISTRY_KEY_FORMATS L"Software\\LAVLight\\Audio\\Formats"
-#define LAVC_AUDIO_LOG_FILE     L"LAVLightAudio.txt"
+#define LAVC_AUDIO_REGISTRY_KEY L"Software\\LAV\\Audio"
+#define LAVC_AUDIO_REGISTRY_KEY_FORMATS L"Software\\LAV\\Audio\\Formats"
+#define LAVC_AUDIO_LOG_FILE     L"LAVAudio.txt"
 
 struct WAVEFORMATEX_HDMV_LPCM;
 
