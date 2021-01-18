@@ -51,7 +51,7 @@ const AMOVIESETUP_PIN sudpPinsVideoDec[] = {
 const AMOVIESETUP_FILTER sudFilterReg =
 {
   &__uuidof(CLAVVideo),       // filter clsid
-  L"LAV Ligh Video Decoder",       // filter name
+  L"LAV Light Video Decoder",       // filter name
   MERIT_PREFERRED + 3,        // merit
   countof(sudpPinsVideoDec),
   sudpPinsVideoDec,
@@ -73,13 +73,13 @@ CFactoryTemplate g_Templates[] = {
   },
   // This entry is for the property page.
   {
-    L"LAV Video Properties",
+    L"LAV Light Video Properties",
     &CLSID_LAVVideoSettingsProp,
     CreateInstance<CLAVVideoSettingsProp>,
     nullptr, nullptr
   },
   {
-    L"LAV Video Format Settings",
+    L"LAV Light Video Format Settings",
     &CLSID_LAVVideoFormatsProp,
     CreateInstance<CLAVVideoFormatsProp>,
     nullptr, nullptr
